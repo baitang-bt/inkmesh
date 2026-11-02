@@ -1,0 +1,125 @@
+:root {
+  --bg: #0f1117;
+  --panel: #1a1d27;
+  --line: rgb(255 255 255 / .08);
+  --text: #f3f4f6;
+  --text-muted: #9ca3af;
+  --accent: #3b82f6;
+  --field: #222638;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+
+html.collab-scroll-lock,
+html.collab-scroll-lock body {
+  overflow: hidden;
+  height: 100%;
+  overscroll-behavior: none;
+}
+html.collab-scroll-lock .collab-main {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+html.collab-scroll-lock .room-screen {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.hidden { display: none !important; }
+
+.collab-main { min-height: 100vh; }
+html.collab-scroll-lock .collab-main { min-height: 0; }
+
+/* 浏览器拒绝 Fullscreen API 时的回退：工作区铺满视口 */
+html.is-collab-pseudo-fullscreen,
+html.is-collab-pseudo-fullscreen body {
+  overflow: hidden !important;
+  height: 100%;
+  width: 100%;
+  margin: 0;
+}
+html.is-collab-pseudo-fullscreen .collab-main {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  background: var(--ws-bg, #181818);
+}
+html.is-collab-pseudo-fullscreen .join-screen {
+  display: none !important;
+}
+html.is-collab-pseudo-fullscreen .room-screen {
+  height: 100%;
+  min-height: 0;
+}
+
+/* —— 加入房间页（保留圆角卡片） —— */
+.join-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+.join-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 28px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  text-align: center;
+}
+.join-card h1 { margin: 0 0 8px; font-size: 1.75rem; }
+.join-hint { margin: 0 0 20px; color: var(--text-muted); font-size: 14px; }
+.join-card label { display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px; text-align: left; }
+.join-room-row { display: flex; gap: 8px; align-items: stretch; }
+.join-card input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--field);
+  color: var(--text);
+  font-size: 18px;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+.join-submit { width: 100%; margin-top: 16px; padding: 14px; font-size: 16px; }
+.join-restore-row {
+  display: flex; align-items: flex-start; gap: 8px; margin-top: 14px;
+  font-size: 13px; color: var(--text-muted); text-align: left; cursor: pointer;
+}
+.join-restore-row input { margin-top: 2px; flex-shrink: 0; }
+.join-pbcc-row {
+  display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin-top: 12px;
+}
+.join-pbcc-btn { width: 100%; font-size: 13px; padding: 10px 12px; }
+.join-pbcc-hint {
+  min-height: 16px; font-size: 12px; color: var(--text-muted); text-align: left;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.join-status { min-height: 20px; margin: 12px 0 0; color: #a3a3a3; font-size: 13px; }
+.join-error { min-height: 20px; margin: 4px 0 0; color: #f87171; font-size: 13px; }
+.join-back {
+  display: inline-block;
+  margin-top: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.join-back:hover { color: var(--text); text-decoration: underline; }
+
+button, .btn {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--field);
+  color: var(--text); padding: 10px 14px; font-weight: 600; cursor: pointer;
+}
+button.primary { background: var(--accent); border-color: transparent; }
+button:disabled { opacity: .45; cursor: not-allowed; }

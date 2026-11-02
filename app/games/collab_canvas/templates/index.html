@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+{% macro cc(path) %}/static/games/collab-canvas/{{ path }}?v={{ asset_version }}{% endmacro %}
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Inkmesh</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap">
+  <link rel="stylesheet" href="/static/css/site.css">
+  <link rel="stylesheet" href="{{ cc('css/drawing-board.css') }}">
+  <link rel="stylesheet" href="{{ cc('css/collab-canvas.css') }}">
+  <link rel="stylesheet" href="{{ cc('css/collab-workspace.css') }}">
+</head>
+<body>
+  <main class="collab-main">
+    <section id="joinScreen" class="join-screen">
+      <div class="join-card">
+        <h1>{{ game.name }}</h1>
+        <p class="join-hint">输入房间号进入；不存在则自动创建。</p>
+        <label for="roomInput">房间号</label>
+        <div class="join-room-row">
+          <input id="roomInput" type="text" maxlength="6" placeholder="AB12" value="{{ initial_room }}" autocomplete="off">
+          <button type="button" id="randomRoomBtn" class="btn" title="随机加入可进入的房间">随机</button>
+        </div>
+        <button type="button" id="joinBtn" class="btn primary join-submit">进入房间</button>
+        <label class="join-restore-row">
+          <input type="checkbox" id="restoreLastBoard" checked>
+          <span>恢复本机上次保存的画板（仅房主有效）</span>
+        </label>
+        <div class="join-pbcc-row">
+          <button type="button" id="openPbccBtn" class="btn join-pbcc-btn">从 .pbcc 文件打开…</button>
+          <span id="openPbccHint" class="join-pbcc-hint"></span>
+          <input type="file" id="openPbccInput" class="join-pbcc-input" accept=".pbcc,application/json" hidden>
+        </div>
+        <p id="joinStatus" class="join-status" aria-live="polite"></p>
+        <p id="joinError" class="join-error" role="alert"></p>
+        <a href="/" class="join-back">← 返回游戏菜单</a>
+      </div>
+    </section>
+
+    <section id="roomScreen" class="room-screen hidden">
+      <div class="collab-shell">
+        <header class="collab-topbar">
+          <div class="collab-topbar-left">
+            <h1>Inkmesh</h1>
+            <span id="roomCode" class="room-badge">----</span>
+            <span id="memberCount" class="room-badge">0/0</span>
+          </div>
+          <div class="collab-topbar-right">
+            <button type="button" id="undoBtn" class="ws-btn" data-tooltip="撤销"><span class="material-symbols-outlined ws-btn-icon" aria-hidden="true">undo</span>撤销</button>
+            <button type="button" id="redoBtn" class="ws-btn" data-tooltip="重做"><span class="material-symbols-outlined ws-btn-icon" aria-hidden="true">redo</span>重做</button>
+            <div class="export-menu" id="exportMenu">
+              <button type="button" id="exportToggleBtn" class="ws-btn" data-tooltip="导出画板"><span class="material-symbols-outlined ws-btn-icon" aria-hidden="true">download</span>导出 ▾</button>
+              <div class="export-menu-panel hidden" id="exportMenuPanel">
+                <p class="export-menu-hint">常用：每画板一个文件</p>
+                <button type="button" data-export="png">PNG</button>
+                <button type="button" data-export="jpeg">JPEG</button>
+                <button type="button" data-export="pbcc">合作画板 (.pbcc)</button>
+                <div class="export-menu-special">
+                  <button type="button" class="export-menu-special-toggle" id="exportSpecialToggle" aria-expanded="false">
+                    <span class="export-menu-special-label">特殊格式</span>
+                    <span class="export-menu-special-caret" aria-hidden="true">▸</span>
+                  </button>
+                  <div class="export-menu-special-panel hidden" id="exportSpecialPanel">
+                    <button type="button" data-export="kra">Krita (.kra)</button>
+                    <button type="button" data-export="skt">Sketchbook (.skt)</button>
+                    <button type="button" data-export="hsj">画世界 Pro (.hsj)</button>
+                    <button type="button" data-export="procreate">Procreate (.procreate)</button>
+                    <button type="button" data-export="psd">Photoshop (.psd)</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button type="button" id="copyLinkBtn" class="ws-btn" data-tooltip="复制房间链接"><span class="material-symbols-outlined ws-btn-icon" aria-hidden="true">link</span>复制链接</button>
+            <button
+              type="button"
+              id="collabFullscreenBtn"
+              class="ws-btn ws-btn-icon-only collab-desktop-only"
+              data-tooltip="全屏"
+              aria-pressed="false"
+              aria-label="全屏"
+              title="全屏 (F11)"
+            >
+              <span id="collabFullscreenIcon" class="material-symbols-outlined ws-btn-icon" aria-hidden="true">fullscreen</span>
+            </button>
+            <button type="button" id="roomPanelToggleBtn" class="ws-btn ws-btn-icon-only" data-tooltip="房间成员 (Tab)" aria-label="房间成员">
+              <span class="material-symbols-outlined ws-btn-icon" aria-hidden="true">group</span>
+            </button>
+            <button type="button" id="settingsToggleBtn" class="ws-btn ws-btn-icon-only" data-tooltip="设置" aria-label="设置">
+              <span class="material-symbols-outlined ws-btn-icon" aria-hidden="true">settings</span>
+            </button>
+            <button type="button" id="leaveRoomBtn" class="ws-btn" data-tooltip="离开房间"><span class="material-symbols-outlined ws-btn-icon" aria-hidden="true">logout</span>离开</button>
+          </div>
+        </header>
+        <p id="statusText" class="status-text"></p>
+
+        <div id="collabWorkspace" class="workspace drawing-board">
+          <aside id="dockLeft" data-dock-slot="left"></aside>
+          <div id="dockGutterLeft" class="dock-width-gutter" data-dock-gutter="leading" aria-label="调整左侧栏宽度" role="separator" aria-orientation="vertical"></div>
+
+          <div id="dockCenter" data-dock-slot="center">
+            <div class="canvas-column">
+              <div class="canvas-stage-wrap">
+                <div id="canvasZoomBadge" class="canvas-zoom-badge hidden" aria-live="polite">100%</div>
+                <div id="canvasStage" class="canvas-stage">
+                  <div id="canvasStageSurface" class="canvas-stage-surface">
+                    <canvas id="drawCanvas" width="1920" height="1080"></canvas>
+                    <div id="cursorLayer"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="dockGutterRight" class="dock-width-gutter" data-dock-gutter="trailing" aria-label="调整右侧栏宽度" role="separator" aria-orientation="vertical"></div>
+          <aside id="dockRight" data-dock-slot="right">
+            <div id="dockRightTop" data-dock-slot="rightTop">
+              <div class="ws-panel-head">调色 / 工具</div>
+              <div class="ws-panel-body">
+                <div id="colorPickerMount"></div>
+                <div class="tool-opts">
+                  <div class="brush-size-block">
+                    <div id="brushSizePreview" class="brush-size-preview" aria-hidden="true">
+                      <div class="brush-size-preview-ring"></div>
+                    </div>
+                    <label class="brush-size-row">
+                      <span class="brush-size-label">粗细</span>
+                      <input id="brushSize" type="range" min="1" max="128" step="0.01" value="8">
+                      <span class="brush-size-value">
+                        <input id="brushSizeNumber" class="brush-size-number" type="number" min="1" max="128" step="0.01" value="8" inputmode="decimal" aria-label="笔刷粗细（px）">
+                        <span class="brush-size-unit" aria-hidden="true">px</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="dockSplitter" role="separator" aria-orientation="horizontal" aria-label="调整面板高度"></div>
+            <div id="dockRightBottom" data-dock-slot="rightBottom">
+              <div class="dock-bottom-tabs">
+                <button type="button" class="dock-bottom-tab is-active" data-bottom-tab="layers">图层</button>
+                <button type="button" class="dock-bottom-tab" data-bottom-tab="boards">画板</button>
+              </div>
+              <div id="layerPanelPane" class="dock-bottom-pane is-active" data-bottom-pane="layers">
+                <div class="layer-list" data-layer-list></div>
+                <div class="layer-footer-toolbar">
+                  <div class="layer-footer-split" data-layer-add-split>
+                    <button type="button" class="layer-footer-btn" data-layer-add-main data-tooltip="新建图层" aria-label="新建图层">
+                      <span class="material-symbols-outlined layer-footer-icon" aria-hidden="true">add</span>
+                    </button>
+                    <button type="button" class="layer-footer-btn layer-footer-caret" data-layer-add-menu data-tooltip="新建选项" aria-label="新建选项" aria-expanded="false">
+                      <span class="material-symbols-outlined layer-footer-caret-icon" aria-hidden="true">arrow_drop_down</span>
+                    </button>
+                  </div>
+                  <button type="button" class="layer-footer-btn" data-layer-group data-tooltip="创建图层组" aria-label="创建图层组">
+                    <span class="material-symbols-outlined layer-footer-icon" aria-hidden="true">folder</span>
+                  </button>
+                  <button type="button" class="layer-footer-btn" data-layer-duplicate data-tooltip="复制图层" aria-label="复制图层">
+                    <span class="material-symbols-outlined layer-footer-icon" aria-hidden="true">filter_none</span>
+                  </button>
+                  <button type="button" class="layer-footer-btn" data-layer-up data-tooltip="上移图层" aria-label="上移图层">
+                    <span class="material-symbols-outlined layer-footer-icon" aria-hidden="true">expand_less</span>
+                  </button>
+                  <button type="button" class="layer-footer-btn" data-layer-down data-tooltip="下移图层" aria-label="下移图层">
+                    <span class="material-symbols-outlined layer-footer-icon" aria-hidden="true">expand_more</span>
+                  </button>
+                  <div class="layer-footer-split" data-layer-props-split>
+                    <button type="button" class="layer-footer-btn" data-layer-props-main data-tooltip="图层属性" aria-label="图层属性" aria-expanded="false">
+                      <span class="material-symbols-outlined layer-footer-icon" aria-hidden="true">tune</span>
+                    </button>
+                    <button type="button" class="layer-footer-btn layer-footer-caret" data-layer-props-menu data-tooltip="图层属性选项" aria-label="图层属性选项" aria-expanded="false">
+                      <span class="material-symbols-outlined layer-footer-caret-icon" aria-hidden="true">arrow_drop_down</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div id="boardPanelPane" class="dock-bottom-pane" data-bottom-pane="boards">
+                <div class="board-list layer-list" data-board-list></div>
+                <div class="layer-footer-toolbar board-footer-toolbar">
+                  <button type="button" class="layer-footer-btn board-footer-add" data-board-add data-tooltip="新建画板" aria-label="新建画板">
+                    <span class="material-symbols-outlined layer-footer-icon" aria-hidden="true">add</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="settingsModal" class="settings-modal hidden" data-scroll-lock-ignore role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="settings-modal-backdrop" data-settings-backdrop>
+      <div class="settings-modal-panel">
+        <header class="settings-modal-header">
+          <h2 id="settingsModalTitle">设置</h2>
+          <button type="button" class="settings-modal-close" data-settings-close aria-label="关闭">
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
+        </header>
+        <div class="settings-modal-tabs">
+          <button type="button" class="settings-modal-tab is-active" data-settings-tab="general">常规</button>
+          <button type="button" class="settings-modal-tab" data-settings-tab="peripheral">外设</button>
+          <button type="button" class="settings-modal-tab" data-settings-tab="shortcuts" data-desktop-only>快捷键</button>
+          <button type="button" class="settings-modal-tab" data-settings-tab="online">联机</button>
+          <button type="button" class="settings-modal-tab" data-settings-tab="network">网络</button>
+        </div>
+        <div class="settings-modal-body">
+          <div class="settings-modal-pane is-active" data-settings-pane="general">
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>取色</span></h3>
+              <label class="settings-row">
+                <span class="settings-row-label">取色模式</span>
+                <select id="settingsColorMode" class="settings-select"></select>
+              </label>
+            </section>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>视图</span></h3>
+              <button type="button" id="settingsResetView" class="settings-action-btn">重置视图</button>
+            </section>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>最近色设置</span></h3>
+              <label class="settings-row">
+                <span class="settings-row-label">最近色排序</span>
+                <select id="settingsRecentOrder" class="settings-select">
+                  <option value="recency">最近优先</option>
+                  <option value="hsv">HSV 排序</option>
+                </select>
+              </label>
+              <label class="settings-row">
+                <span class="settings-row-label">最近色数量</span>
+                <input id="settingsRecentLimit" class="settings-select" type="number" min="2" max="24" step="1" value="12">
+              </label>
+            </section>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>用户界面</span></h3>
+              <label class="settings-row settings-row-check">
+                <input id="settingsSwapSidebars" type="checkbox">
+                <span>反转左右栏</span>
+              </label>
+              <label class="settings-row settings-row-check" data-mobile-only>
+                <input id="settingsGestures" type="checkbox">
+                <span>多指手势（平移/缩放/旋转）</span>
+              </label>
+            </section>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>选区容差</span></h3>
+              <label class="settings-row">
+                <span class="settings-row-label">填充容差</span>
+                <input id="settingsFillTolerance" type="range" min="0" max="64" step="1" value="20">
+                <output id="settingsFillToleranceOut">20</output>
+              </label>
+              <label class="settings-row">
+                <span class="settings-row-label">魔棒容差</span>
+                <input id="settingsWandTolerance" type="range" min="0" max="64" step="1" value="20">
+                <output id="settingsWandToleranceOut">20</output>
+              </label>
+            </section>
+          </div>
+          <div class="settings-modal-pane" data-settings-pane="peripheral">
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>数位笔</span></h3>
+              <label class="settings-row settings-row-check">
+                <input id="settingsPenPressure" type="checkbox"> 启用笔压
+              </label>
+              <label class="settings-row">
+                <span class="settings-row-label">灵敏度</span>
+                <input id="settingsPenSensitivity" type="range" min="25" max="200" step="5" value="100">
+                <output id="settingsPenSensitivityOut">100%</output>
+              </label>
+            </section>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>笔刷防抖</span></h3>
+              <p class="settings-hint">平滑笔画轨迹，减少手抖与折角；级数越高越平滑，跟手程度略降。</p>
+              <label class="settings-row settings-row-check">
+                <input id="settingsDebounce" type="checkbox"> 启用防抖
+              </label>
+              <label class="settings-row">
+                <span class="settings-row-label">防抖级数</span>
+                <input id="settingsDebounceLevel" type="range" min="1" max="5" step="1" value="2">
+                <output id="settingsDebounceLevelOut">2</output>
+              </label>
+            </section>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>笔压测试</span></h3>
+              <div class="pen-test-wrap">
+                <canvas id="penTestCanvas" class="pen-test-canvas" width="480" height="200" aria-label="笔压测试画板"></canvas>
+                <p class="settings-hint pen-test-pressure" data-pen-test-pressure></p>
+              </div>
+            </section>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>防抖测试</span></h3>
+              <div class="pen-test-wrap">
+                <canvas id="debounceTestCanvas" class="pen-test-canvas" width="480" height="200" aria-label="防抖测试画板"></canvas>
+                <p class="settings-hint pen-test-pressure" data-debounce-test-pressure></p>
+              </div>
+            </section>
+          </div>
+          <div class="settings-modal-pane" data-settings-pane="shortcuts" data-desktop-only>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>快捷键绑定</span></h3>
+              <p class="settings-hint">点击键位按钮后按下组合键；右键点击可清除绑定。</p>
+              <div class="shortcut-list" data-shortcut-list></div>
+              <p class="settings-hint" data-shortcut-status>点击键位后按下新的组合键</p>
+              <button type="button" class="settings-action-btn" data-shortcut-reset>恢复默认快捷键</button>
+            </section>
+          </div>
+          <div class="settings-modal-pane" data-settings-pane="online">
+            <p class="settings-hint settings-pane-lead">以下设置仅在本合作画板内生效，并保存在本机浏览器。</p>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>显示名称</span></h3>
+              <label class="settings-row settings-row-check">
+                <input id="settingsOnlineUsePassportName" type="checkbox" checked>
+                <span>使用通行证用户名</span>
+              </label>
+              <label class="settings-row">
+                <span class="settings-row-label">自定义名</span>
+                <input id="settingsOnlineDisplayName" class="settings-text-input" type="text" maxlength="24" placeholder="合作画板专用昵称" autocomplete="off">
+              </label>
+              <p class="settings-hint">关闭「使用通行证用户名」后，将显示上方自定义名称。</p>
+            </section>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>光标标签</span></h3>
+              <div class="online-label-color-block">
+                <div id="settingsOnlineLabelColorMount" class="online-label-color-mount"></div>
+                <button type="button" id="settingsOnlineLabelReset" class="settings-action-btn online-label-reset-btn">恢复默认</button>
+              </div>
+              <div class="online-label-preview-wrap">
+                <span class="settings-row-label">预览</span>
+                <span id="settingsOnlineLabelPreview" class="online-label-preview">你的昵称</span>
+              </div>
+            </section>
+          </div>
+          <div class="settings-modal-pane" data-settings-pane="network">
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>连接信息</span></h3>
+              <div class="network-row"><span class="network-label">连接状态</span><span data-net-status>—</span></div>
+              <div class="network-row"><span class="network-label">房间号</span><span data-net-room>—</span></div>
+              <div class="network-row"><span class="network-label">延迟 RTT</span><span data-net-rtt>—</span></div>
+              <div class="network-row"><span class="network-label">最近检测</span><span data-net-time>—</span></div>
+            </section>
+            <section class="settings-subsection">
+              <h3 class="settings-subsection-head"><span>网络诊断</span></h3>
+              <p class="settings-hint network-error" data-net-error></p>
+              <button type="button" class="settings-action-btn" data-net-test>检测连接</button>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="roomPanelModal" class="room-panel-modal hidden" role="dialog" aria-modal="true" aria-labelledby="roomPanelTitle">
+    <div class="room-panel-backdrop" data-room-panel-backdrop>
+      <div class="room-panel-panel">
+        <header class="room-panel-header">
+          <div class="room-panel-header-main">
+            <h2 id="roomPanelTitle">房间成员</h2>
+            <p class="room-panel-hint">按 <kbd>Tab</kbd> 开关 · 你的延迟 <span data-room-self-rtt>—</span></p>
+          </div>
+          <button type="button" class="room-panel-close" data-room-panel-close aria-label="关闭">
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
+        </header>
+        <div class="room-panel-batch hidden" data-room-batch-bar>
+          <span class="room-panel-batch-label">批量</span>
+          <div class="room-panel-batch-actions">
+            <button type="button" class="room-batch-btn" data-room-batch data-batch-draw="1">全开绘画</button>
+            <button type="button" class="room-batch-btn" data-room-batch data-batch-draw="0">全禁绘画</button>
+            <button type="button" class="room-batch-btn" data-room-batch data-batch-save="1">全开保存</button>
+            <button type="button" class="room-batch-btn" data-room-batch data-batch-save="0">全禁保存</button>
+          </div>
+        </div>
+        <div class="room-player-list" data-room-player-list></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.COLLAB_BOOT = {
+      userId: {{ user_id | tojson }},
+      nickname: {{ nickname | tojson }},
+      initialRoom: {{ initial_room | tojson }}
+    };
+  </script>
+  <script src="{{ cc('js/board/core/perfect-freehand.js') }}"></script>
+  <script src="{{ cc('js/board/core/segment-utils.js') }}"></script>
+  <script src="{{ cc('js/board/core/stroke-render.js') }}"></script>
+  <script src="{{ cc('js/board/core/layer-compositor.js') }}"></script>
+  <script src="{{ cc('js/board/core/drawing-board.js') }}"></script>
+  <script src="{{ cc('js/board/layer/layer-model.js') }}"></script>
+  <script src="{{ cc('js/board/layer/layer-panel-popovers.js') }}"></script>
+  <script src="{{ cc('js/net/collab-board-adapter.js') }}"></script>
+  <script src="{{ cc('js/net/board-commands.js') }}"></script>
+  <script src="{{ cc('js/net/collab-message-handlers.js') }}"></script>
+  <script src="{{ cc('js/app/app-session-handlers.js') }}"></script>
+  <script src="{{ cc('js/app/board-pointer.js') }}"></script>
+  <script src="{{ cc('js/board/tool/pen-input.js') }}"></script>
+  <script src="{{ cc('js/board/tool/stroke-smoother.js') }}"></script>
+  <script src="{{ cc('js/app/pen-test-pad.js') }}"></script>
+  <script src="{{ cc('js/net/online-prefs.js') }}"></script>
+  <script src="{{ cc('js/board/ui/brush-preview.js') }}"></script>
+  <script src="{{ cc('js/net/cursor-overlay.js') }}"></script>
+  <script src="{{ cc('js/board/ui/canvas-viewport.js') }}"></script>
+  <script src="{{ cc('js/board/color/color-math.js') }}"></script>
+  <script src="{{ cc('js/board/color/color-settings.js') }}"></script>
+  <script src="{{ cc('js/board/color/color-picker-surface.js') }}"></script>
+  <script src="{{ cc('js/board/color/color-picker.js') }}"></script>
+  <script src="{{ cc('js/board/color/color-pair-state.js') }}"></script>
+  <script src="{{ cc('js/board/color/recent-colors.js') }}"></script>
+  <script src="{{ cc('js/board/tool/tool-registry.js') }}"></script>
+  <script src="{{ cc('js/board/tool/tool-variant-store.js') }}"></script>
+  <script src="{{ cc('js/board/tool/tool-controller.js') }}"></script>
+  <script src="{{ cc('js/board/select/canvas-overlay.js') }}"></script>
+  <script src="{{ cc('js/app/material-icons.js') }}"></script>
+  <script src="{{ cc('js/board/select/selection-manager.js') }}"></script>
+  <script src="{{ cc('js/board/select/selection-actions-bar.js') }}"></script>
+  <script src="{{ cc('js/board/layer/layer-move.js') }}"></script>
+  <script src="{{ cc('js/board/tool/brush-preset.js') }}"></script>
+  <script src="{{ cc('js/board/tool/register-tools.js') }}"></script>
+  <script src="{{ cc('js/app/ui-tooltip.js') }}"></script>
+  <script src="{{ cc('js/app/ui-prefs.js') }}"></script>
+  <script src="{{ cc('js/app/workspace-layout.js') }}"></script>
+  <script src="{{ cc('js/board/ui/tool-rail.js') }}"></script>
+  <script src="{{ cc('js/board/color/popup-palette.js') }}"></script>
+  <script src="{{ cc('js/board/layer/layer-thumbnail.js') }}"></script>
+  <script src="{{ cc('js/board/layer/layer-panel.js') }}"></script>
+  <script src="{{ cc('js/app/board-panel.js') }}"></script>
+  <script src="{{ cc('js/board/export/zip-store.js') }}"></script>
+  <script src="{{ cc('js/board/export/kra-export.js') }}"></script>
+  <script src="{{ cc('js/board/export/special-format-export.js') }}"></script>
+  <script src="{{ cc('js/board/export/skt-export.js') }}"></script>
+  <script src="{{ cc('js/board/export/hsj-export.js') }}"></script>
+  <script src="{{ cc('js/board/export/procreate-export.js') }}"></script>
+  <script src="{{ cc('js/board/export/psd-export.js') }}"></script>
+  <script src="{{ cc('js/board/export/pbcc-format.js') }}"></script>
+  <script src="{{ cc('js/board/export/pbcc-local-store.js') }}"></script>
+  <script src="{{ cc('js/board/export/collab-export.js') }}"></script>
+  <script src="{{ cc('js/board/export/pbcc-host-service.js') }}"></script>
+  <script src="{{ cc('js/app/export-menu.js') }}"></script>
+  <script src="{{ cc('js/app/shortcut-registry.js') }}"></script>
+  <script src="{{ cc('js/app/shortcut-manager.js') }}"></script>
+  <script src="{{ cc('js/net/network-monitor.js') }}"></script>
+  <script src="{{ cc('js/app/settings-panel.js') }}"></script>
+  <script src="{{ cc('js/net/collab-session.js') }}"></script>
+  <script src="{{ cc('js/app/collab-fullscreen.js') }}"></script>
+  <script src="{{ cc('js/board/ui/canvas-watermark.js') }}"></script>
+  <script src="{{ cc('js/app/room-panel.js') }}"></script>
+  <script src="{{ cc('js/app/board-actions.js') }}"></script>
+  <script src="{{ cc('js/app/collab-board.js') }}"></script>
+  <script src="{{ cc('js/app/collab-app.js') }}"></script>
+</body>
+</html>
