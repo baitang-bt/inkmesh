@@ -19,6 +19,8 @@
       this._drawing = false;
       this._pointerId = null;
       this._lastPoint = null;
+      this._lastRaw = null;
+      this._simulatePressure = true;
       this._clearTimer = null;
       if (this.canvas) this._bind();
     }
@@ -37,6 +39,7 @@
       this._drawing = false;
       this._pointerId = null;
       this._lastPoint = null;
+      this._lastRaw = null;
       if (this.strokeSmoother) this.strokeSmoother.reset();
       this._cancelClear();
       this.clear();
@@ -81,11 +84,14 @@
       this.canvas.setPointerCapture(event.pointerId);
       this._drawing = true;
       this._pointerId = event.pointerId;
+      this._lastRaw = event;
+      const hasReal = this.penInput.hasRealPressure(event);
+      this._simulatePressure = !(hasReal || this.penInput.useSpeedCurve);
       const point = this._normalizedPoint(event);
+      const pressure = this.penInput.pressureForSample(event, null, this._simulatePressure);
       this._lastPoint = point;
       if (this.strokeSmoother) {
         this.strokeSmoother.reset();
-        const pressure = this.penInput.isStylus(event) ? Number(event.pressure) : null;
         const out = this.strokeSmoother.push(point.x, point.y, pressure);
         if (out) this._lastPoint = out;
       }
@@ -96,28 +102,25 @@
     _onPointerMove(event) {
       if (!this._active || !this._drawing || event.pointerId !== this._pointerId) return;
       event.preventDefault();
-      const useReal = this.penInput.hasRealPressure(event);
       const samples = this.penInput.coalescedSamples(event);
-      let size = this.penInput.strokeSize(event);
+      const size = this.penInput.strokeSize(event);
+      let prevRaw = this._lastRaw;
       for (let i = 0; i < samples.length; i += 1) {
         const sample = samples[i];
         const point = this._normalizedPoint(sample);
-        let drawPt = point;
+        const pressure = this.penInput.pressureForSample(sample, prevRaw, this._simulatePressure);
+        prevRaw = sample;
+        let drawPt = { x: point.x, y: point.y, pressure };
         if (this.strokeSmoother) {
-          const pressure = useReal ? this.penInput.mappedPressure(sample.pressure) : null;
           const out = this.strokeSmoother.push(point.x, point.y, pressure);
           if (!out) continue;
           drawPt = out;
         }
-        size = this.penInput.sizeForPressure(
-          drawPt.pressure != null ? drawPt.pressure : Number(sample.pressure),
-          useReal || this.penInput.isStylus(sample),
-          sample,
-          useReal
-        );
-        if (this._lastPoint) this._drawSegment(this._lastPoint, drawPt, size, this.getColor());
+        const width = size * (0.35 + 0.65 * (drawPt.pressure != null ? drawPt.pressure : 0.5));
+        if (this._lastPoint) this._drawSegment(this._lastPoint, drawPt, width, this.getColor());
         this._lastPoint = drawPt;
       }
+      this._lastRaw = event;
       if (this.penInput.isStylus(event)) this.penInput.markPenActivity(event, true);
       this._updatePressureLabel(event, size);
     }
@@ -125,9 +128,22 @@
     _onPointerUp(event) {
       if (!this._drawing || event.pointerId !== this._pointerId) return;
       event.preventDefault();
+      if (this.strokeSmoother && this._lastPoint) {
+        const raw = this._normalizedPoint(event);
+        const pressure = this.penInput.pressureForSample(
+          event,
+          this._lastRaw,
+          this._simulatePressure
+        );
+        const flushed = this.strokeSmoother.flushTo(raw.x, raw.y, pressure);
+        const size = this.penInput.strokeSize(event);
+        const width = size * (0.35 + 0.65 * (flushed.pressure != null ? flushed.pressure : 0.5));
+        this._drawSegment(this._lastPoint, flushed, width, this.getColor());
+      }
       this._drawing = false;
       this._pointerId = null;
       this._lastPoint = null;
+      this._lastRaw = null;
       if (this.strokeSmoother) this.strokeSmoother.reset();
       if (this.penInput.isStylus(event)) this.penInput.clearPenPointer(event);
       this._scheduleClear();
@@ -145,7 +161,7 @@
       const w = this.canvas.width;
       const h = this.canvas.height;
       this.ctx.strokeStyle = color;
-      this.ctx.lineWidth = size;
+      this.ctx.lineWidth = Math.max(1, size);
       this.ctx.lineCap = 'round';
       this.ctx.lineJoin = 'round';
       this.ctx.beginPath();

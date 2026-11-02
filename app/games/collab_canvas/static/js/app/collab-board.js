@@ -179,6 +179,37 @@
       }
     }
 
+    /**
+     * 绘制中刷新：图层缓存 + 未完成笔画（含本地当前笔），不重建已烘焙层。
+     */
+    _presentLiveStroke() {
+      if (!this.drawingBoard || typeof this.drawingBoard.present !== 'function') {
+        this._redraw();
+        return;
+      }
+      this.drawingBoard.strokes = this.strokes;
+      this.drawingBoard.layersMeta = this.layersMeta;
+      this.drawingBoard.present();
+    }
+
+    /**
+     * 抬笔后把指定 stroke 烘焙进图层缓存并 present；找不到则全量重绘。
+     */
+    _commitLiveStroke(strokeId) {
+      const stroke = DrawingBoard.findStroke(this.strokes, this.selfId, strokeId);
+      if (stroke && typeof this.drawingBoard.bakeStroke === 'function') {
+        this.drawingBoard.bakeStroke(stroke);
+        this.drawingBoard.strokes = this.strokes;
+        this.drawingBoard.layersMeta = this.layersMeta;
+        this.drawingBoard.present();
+        if (this.layerPanel && this.layerPanel.refreshThumbnails) {
+          this.layerPanel.refreshThumbnails();
+        }
+        return;
+      }
+      this._redraw();
+    }
+
     _activeLayerLocked() {
       return this._isLayerLocked(this.drawLayerId());
     }
@@ -296,10 +327,10 @@
       });
     }
 
-    /** 标记当前笔划末段以启用 perfect-freehand 收尾锥形。 */
+    /** 标记当前笔划末段为 end/single，供整笔锥形与图层烘焙。 */
     _finalizeActiveStroke() {
-      if (!this.activeStrokeId || !this.ownerId) return;
-      const stroke = DrawingBoard.findStroke(this.strokes, this.ownerId, this.activeStrokeId);
+      if (!this.activeStrokeId || !this.selfId) return;
+      const stroke = DrawingBoard.findStroke(this.strokes, this.selfId, this.activeStrokeId);
       if (!stroke || !stroke.segments.length) return;
       const last = stroke.segments[stroke.segments.length - 1];
       if (last.strokePart === 'start') last.strokePart = 'single';
@@ -456,7 +487,17 @@
           preserveStrokeId: shouldPreserve ? this.activeStrokeId : ''
         }
       );
-      if (!this.isDrawing) this._redraw();
+      if (!this.isDrawing) {
+        this._redraw();
+        return;
+      }
+      // 绘制中快照：重建已完成层缓存，当前笔仍作 live 叠绘。
+      if (typeof this.drawingBoard.rebuildLayerCaches === 'function') {
+        this.drawingBoard.rebuildLayerCaches(this.strokes, this.layersMeta);
+        this.drawingBoard.present();
+      } else {
+        this._redraw();
+      }
     }
 
 
@@ -473,16 +514,55 @@
     }
 
     _appendRemoteSegment(ownerId, strokeId, segment, layerId) {
-      this.drawingBoard.appendSegment(this.strokes, ownerId, strokeId, segment, layerId);
-      if (!this.isDrawing) this._redraw();
-      else this.drawingBoard.drawSegment(segment);
+      const stroke = this.drawingBoard.appendSegment(
+        this.strokes,
+        ownerId,
+        strokeId,
+        segment,
+        layerId
+      );
+      const StrokePath = window.StrokePath;
+      const finished = StrokePath && StrokePath.isStrokeFinished(stroke);
+      const pathTool = StrokePath && StrokePath.isPathTool(segment.tool);
+      if (pathTool) {
+        if (finished && typeof this.drawingBoard.bakeStroke === 'function') {
+          this.drawingBoard.bakeStroke(stroke);
+        }
+        this.drawingBoard.strokes = this.strokes;
+        this.drawingBoard.layersMeta = this.layersMeta;
+        if (typeof this.drawingBoard.present === 'function') {
+          this.drawingBoard.present();
+        } else {
+          this._redraw();
+        }
+        if (finished && this.layerPanel && this.layerPanel.refreshThumbnails) {
+          this.layerPanel.refreshThumbnails();
+        }
+        return;
+      }
+      // 本地绘制中：形状必须进层缓存，否则下一帧 present 会盖掉主画布上的即时 drawSegment。
+      if (this.isDrawing && typeof this.drawingBoard.rebuildLayerCaches === 'function') {
+        this.drawingBoard.rebuildLayerCaches(this.strokes, this.layersMeta);
+        this.drawingBoard.present();
+        return;
+      }
+      this._redraw();
     }
 
+    /**
+     * 追加本地 segment；画笔四件套走整笔 present，其它工具仍即时 drawSegment。
+     */
     _appendLocalSegment(strokeId, segment) {
       if (!this.canDraw && segment.tool !== 'localRaster') return;
       if (segment.tool !== 'localRaster' && this._activeLayerLocked()) return;
       this.drawingBoard.appendSegment(this.strokes, this.selfId, strokeId, segment, this.drawLayerId());
-      this.drawingBoard.drawSegment(segment);
+      const StrokePath = window.StrokePath;
+      const pathTool = StrokePath && StrokePath.isPathTool(segment.tool);
+      if (pathTool) {
+        this._presentLiveStroke();
+      } else {
+        this.drawingBoard.drawSegment(segment);
+      }
       if (segment.tool !== 'localRaster') {
         this.adapter.sendSegment(strokeId, segment);
       }

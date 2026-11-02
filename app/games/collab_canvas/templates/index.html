@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 {% macro cc(path) %}/static/games/collab-canvas/{{ path }}?v={{ asset_version }}{% endmacro %}
+{% macro eng(path) %}/static/packages/ink-engine/{{ path }}?v={{ asset_version }}{% endmacro %}
+{% macro net(path) %}/static/packages/ink-net/{{ path }}?v={{ asset_version }}{% endmacro %}
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -10,32 +12,67 @@
   <link rel="stylesheet" href="{{ cc('css/drawing-board.css') }}">
   <link rel="stylesheet" href="{{ cc('css/collab-canvas.css') }}">
   <link rel="stylesheet" href="{{ cc('css/collab-workspace.css') }}">
+  <link rel="stylesheet" href="{{ cc('css/lobby.css') }}">
 </head>
 <body>
   <main class="collab-main">
-    <section id="joinScreen" class="join-screen">
-      <div class="join-card">
-        <h1>{{ game.name }}</h1>
-        <p class="join-hint">输入房间号进入；不存在则自动创建。</p>
-        <label for="roomInput">房间号</label>
-        <div class="join-room-row">
-          <input id="roomInput" type="text" maxlength="6" placeholder="AB12" value="{{ initial_room }}" autocomplete="off">
-          <button type="button" id="randomRoomBtn" class="btn" title="随机加入可进入的房间">随机</button>
-        </div>
-        <button type="button" id="joinBtn" class="btn primary join-submit">进入房间</button>
-        <label class="join-restore-row">
-          <input type="checkbox" id="restoreLastBoard" checked>
-          <span>恢复本机上次保存的画板（仅房主有效）</span>
-        </label>
-        <div class="join-pbcc-row">
-          <button type="button" id="openPbccBtn" class="btn join-pbcc-btn">从 .pbcc 文件打开…</button>
+    <section id="joinScreen" class="join-screen lobby-home">
+      <aside class="lobby-nav" aria-label="大厅导航">
+        <div class="lobby-brand">{{ game.name }}</div>
+        <nav class="lobby-nav-list" role="tablist">
+          <button type="button" class="lobby-nav-item is-active" data-lobby-view="boards" role="tab" aria-selected="true">
+            <span class="material-symbols-outlined" aria-hidden="true">dashboard</span>
+            我的画板
+          </button>
+          <button type="button" class="lobby-nav-item" data-lobby-view="recent" role="tab" aria-selected="false">
+            <span class="material-symbols-outlined" aria-hidden="true">history</span>
+            最近
+          </button>
+        </nav>
+      </aside>
+
+      <section class="lobby-main" aria-label="画板列表">
+        <header class="lobby-main-header">
+          <h1 id="lobbyTitle">我的画板</h1>
+          <div class="lobby-toolbar">
+            <div class="lobby-join-row">
+              <label class="lobby-sr-only" for="roomInput">房间号</label>
+              <input id="roomInput" type="text" maxlength="6" placeholder="房间号" value="{{ initial_room }}" autocomplete="off">
+              <button type="button" id="joinBtn" class="btn">进入</button>
+              <button type="button" id="randomRoomBtn" class="btn" title="随机加入可进入的房间">随机</button>
+            </div>
+            <button type="button" id="openPbccBtn" class="btn">导入</button>
+            <button type="button" id="lobbyNewBoardBtn" class="btn lobby-btn-primary">新建画板</button>
+            <input type="file" id="openPbccInput" class="join-pbcc-input" accept=".pbcc,application/json" hidden>
+          </div>
+        </header>
+        <div class="lobby-main-meta">
+          <label class="join-restore-row lobby-restore">
+            <input type="checkbox" id="restoreLastBoard" checked>
+            <span>进入时恢复本机上次画板（仅房主）</span>
+          </label>
           <span id="openPbccHint" class="join-pbcc-hint"></span>
-          <input type="file" id="openPbccInput" class="join-pbcc-input" accept=".pbcc,application/json" hidden>
         </div>
         <p id="joinStatus" class="join-status" aria-live="polite"></p>
         <p id="joinError" class="join-error" role="alert"></p>
-        <a href="/" class="join-back">← 返回游戏菜单</a>
-      </div>
+        <div id="lobbyBoardGrid" class="lobby-board-grid"></div>
+        <div id="lobbyEmpty" class="lobby-empty hidden">
+          <p class="lobby-empty-title">还没有画板</p>
+          <p class="lobby-empty-hint">新建一个房间开始画，或导入 .pbcc。进出过的房间会出现在这里。</p>
+          <div class="lobby-empty-actions">
+            <button type="button" id="lobbyEmptyNewBtn" class="btn lobby-btn-primary">新建画板</button>
+            <button type="button" id="lobbyEmptyImportBtn" class="btn">导入 .pbcc</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="lobby-peers" aria-label="最近一起画过的人">
+        <header class="lobby-peers-header">
+          <h2>最近一起画过的人</h2>
+        </header>
+        <ul id="lobbyPeerList" class="lobby-peer-list"></ul>
+        <p id="lobbyPeerEmpty" class="lobby-peer-empty">进过房间后，同房的人会出现在这里。</p>
+      </aside>
     </section>
 
     <section id="roomScreen" class="room-screen hidden">
@@ -383,68 +420,71 @@
       initialRoom: {{ initial_room | tojson }}
     };
   </script>
-  <script src="{{ cc('js/board/core/perfect-freehand.js') }}"></script>
-  <script src="{{ cc('js/board/core/segment-utils.js') }}"></script>
-  <script src="{{ cc('js/board/core/stroke-render.js') }}"></script>
-  <script src="{{ cc('js/board/core/layer-compositor.js') }}"></script>
-  <script src="{{ cc('js/board/core/drawing-board.js') }}"></script>
-  <script src="{{ cc('js/board/layer/layer-model.js') }}"></script>
-  <script src="{{ cc('js/board/layer/layer-panel-popovers.js') }}"></script>
-  <script src="{{ cc('js/net/collab-board-adapter.js') }}"></script>
-  <script src="{{ cc('js/net/board-commands.js') }}"></script>
-  <script src="{{ cc('js/net/collab-message-handlers.js') }}"></script>
+  <script src="{{ eng('js/board/core/perfect-freehand.js') }}"></script>
+  <script src="{{ eng('js/board/core/stroke-path.js') }}"></script>
+  <script src="{{ eng('js/board/core/segment-utils.js') }}"></script>
+  <script src="{{ eng('js/board/core/stroke-render.js') }}"></script>
+  <script src="{{ eng('js/board/core/layer-compositor.js') }}"></script>
+  <script src="{{ eng('js/board/core/drawing-board.js') }}"></script>
+  <script src="{{ eng('js/board/layer/layer-model.js') }}"></script>
+  <script src="{{ eng('js/board/layer/layer-panel-popovers.js') }}"></script>
+  <script src="{{ net('js/collab-board-adapter.js') }}"></script>
+  <script src="{{ net('js/board-commands.js') }}"></script>
+  <script src="{{ net('js/collab-message-handlers.js') }}"></script>
   <script src="{{ cc('js/app/app-session-handlers.js') }}"></script>
   <script src="{{ cc('js/app/board-pointer.js') }}"></script>
-  <script src="{{ cc('js/board/tool/pen-input.js') }}"></script>
-  <script src="{{ cc('js/board/tool/stroke-smoother.js') }}"></script>
+  <script src="{{ eng('js/board/tool/pen-input.js') }}"></script>
+  <script src="{{ eng('js/board/tool/stroke-smoother.js') }}"></script>
   <script src="{{ cc('js/app/pen-test-pad.js') }}"></script>
-  <script src="{{ cc('js/net/online-prefs.js') }}"></script>
-  <script src="{{ cc('js/board/ui/brush-preview.js') }}"></script>
-  <script src="{{ cc('js/net/cursor-overlay.js') }}"></script>
-  <script src="{{ cc('js/board/ui/canvas-viewport.js') }}"></script>
-  <script src="{{ cc('js/board/color/color-math.js') }}"></script>
-  <script src="{{ cc('js/board/color/color-settings.js') }}"></script>
-  <script src="{{ cc('js/board/color/color-picker-surface.js') }}"></script>
-  <script src="{{ cc('js/board/color/color-picker.js') }}"></script>
-  <script src="{{ cc('js/board/color/color-pair-state.js') }}"></script>
-  <script src="{{ cc('js/board/color/recent-colors.js') }}"></script>
-  <script src="{{ cc('js/board/tool/tool-registry.js') }}"></script>
-  <script src="{{ cc('js/board/tool/tool-variant-store.js') }}"></script>
-  <script src="{{ cc('js/board/tool/tool-controller.js') }}"></script>
-  <script src="{{ cc('js/board/select/canvas-overlay.js') }}"></script>
+  <script src="{{ net('js/online-prefs.js') }}"></script>
+  <script src="{{ eng('js/board/ui/brush-preview.js') }}"></script>
+  <script src="{{ net('js/cursor-overlay.js') }}"></script>
+  <script src="{{ eng('js/board/ui/canvas-viewport.js') }}"></script>
+  <script src="{{ eng('js/board/color/color-math.js') }}"></script>
+  <script src="{{ eng('js/board/color/color-settings.js') }}"></script>
+  <script src="{{ eng('js/board/color/color-picker-surface.js') }}"></script>
+  <script src="{{ eng('js/board/color/color-picker.js') }}"></script>
+  <script src="{{ eng('js/board/color/color-pair-state.js') }}"></script>
+  <script src="{{ eng('js/board/color/recent-colors.js') }}"></script>
+  <script src="{{ eng('js/board/tool/tool-registry.js') }}"></script>
+  <script src="{{ eng('js/board/tool/tool-variant-store.js') }}"></script>
+  <script src="{{ eng('js/board/tool/tool-controller.js') }}"></script>
+  <script src="{{ eng('js/board/select/canvas-overlay.js') }}"></script>
   <script src="{{ cc('js/app/material-icons.js') }}"></script>
-  <script src="{{ cc('js/board/select/selection-manager.js') }}"></script>
-  <script src="{{ cc('js/board/select/selection-actions-bar.js') }}"></script>
-  <script src="{{ cc('js/board/layer/layer-move.js') }}"></script>
-  <script src="{{ cc('js/board/tool/brush-preset.js') }}"></script>
-  <script src="{{ cc('js/board/tool/register-tools.js') }}"></script>
+  <script src="{{ eng('js/board/select/selection-manager.js') }}"></script>
+  <script src="{{ eng('js/board/select/selection-actions-bar.js') }}"></script>
+  <script src="{{ eng('js/board/layer/layer-move.js') }}"></script>
+  <script src="{{ eng('js/board/tool/brush-preset.js') }}"></script>
+  <script src="{{ eng('js/board/tool/register-tools.js') }}"></script>
   <script src="{{ cc('js/app/ui-tooltip.js') }}"></script>
   <script src="{{ cc('js/app/ui-prefs.js') }}"></script>
   <script src="{{ cc('js/app/workspace-layout.js') }}"></script>
-  <script src="{{ cc('js/board/ui/tool-rail.js') }}"></script>
-  <script src="{{ cc('js/board/color/popup-palette.js') }}"></script>
-  <script src="{{ cc('js/board/layer/layer-thumbnail.js') }}"></script>
-  <script src="{{ cc('js/board/layer/layer-panel.js') }}"></script>
+  <script src="{{ eng('js/board/ui/tool-rail.js') }}"></script>
+  <script src="{{ eng('js/board/color/popup-palette.js') }}"></script>
+  <script src="{{ eng('js/board/layer/layer-thumbnail.js') }}"></script>
+  <script src="{{ eng('js/board/layer/layer-panel.js') }}"></script>
   <script src="{{ cc('js/app/board-panel.js') }}"></script>
-  <script src="{{ cc('js/board/export/zip-store.js') }}"></script>
-  <script src="{{ cc('js/board/export/kra-export.js') }}"></script>
-  <script src="{{ cc('js/board/export/special-format-export.js') }}"></script>
-  <script src="{{ cc('js/board/export/skt-export.js') }}"></script>
-  <script src="{{ cc('js/board/export/hsj-export.js') }}"></script>
-  <script src="{{ cc('js/board/export/procreate-export.js') }}"></script>
-  <script src="{{ cc('js/board/export/psd-export.js') }}"></script>
-  <script src="{{ cc('js/board/export/pbcc-format.js') }}"></script>
-  <script src="{{ cc('js/board/export/pbcc-local-store.js') }}"></script>
-  <script src="{{ cc('js/board/export/collab-export.js') }}"></script>
-  <script src="{{ cc('js/board/export/pbcc-host-service.js') }}"></script>
+  <script src="{{ eng('js/board/export/zip-store.js') }}"></script>
+  <script src="{{ eng('js/board/export/kra-export.js') }}"></script>
+  <script src="{{ eng('js/board/export/special-format-export.js') }}"></script>
+  <script src="{{ eng('js/board/export/skt-export.js') }}"></script>
+  <script src="{{ eng('js/board/export/hsj-export.js') }}"></script>
+  <script src="{{ eng('js/board/export/procreate-export.js') }}"></script>
+  <script src="{{ eng('js/board/export/psd-export.js') }}"></script>
+  <script src="{{ eng('js/board/export/pbcc-format.js') }}"></script>
+  <script src="{{ eng('js/board/export/pbcc-local-store.js') }}"></script>
+  <script src="{{ cc('js/app/lobby-history.js') }}"></script>
+  <script src="{{ cc('js/app/lobby-home.js') }}"></script>
+  <script src="{{ eng('js/board/export/collab-export.js') }}"></script>
+  <script src="{{ eng('js/board/export/pbcc-host-service.js') }}"></script>
   <script src="{{ cc('js/app/export-menu.js') }}"></script>
   <script src="{{ cc('js/app/shortcut-registry.js') }}"></script>
   <script src="{{ cc('js/app/shortcut-manager.js') }}"></script>
-  <script src="{{ cc('js/net/network-monitor.js') }}"></script>
+  <script src="{{ net('js/network-monitor.js') }}"></script>
   <script src="{{ cc('js/app/settings-panel.js') }}"></script>
-  <script src="{{ cc('js/net/collab-session.js') }}"></script>
+  <script src="{{ net('js/collab-session.js') }}"></script>
   <script src="{{ cc('js/app/collab-fullscreen.js') }}"></script>
-  <script src="{{ cc('js/board/ui/canvas-watermark.js') }}"></script>
+  <script src="{{ eng('js/board/ui/canvas-watermark.js') }}"></script>
   <script src="{{ cc('js/app/room-panel.js') }}"></script>
   <script src="{{ cc('js/app/board-actions.js') }}"></script>
   <script src="{{ cc('js/app/collab-board.js') }}"></script>

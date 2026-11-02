@@ -72,6 +72,43 @@
       return Boolean(doc && Array.isArray(doc.boards) && doc.boards.length);
     },
 
+    /**
+     * 列出某用户的本机快照摘要（大厅卡片用）。
+     * @param {string} userId 通行证 / 开发用户 id
+     * @returns {Promise<Array<{roomId:string,title:string,savedAt:number}>>}
+     */
+    async listForUser(userId) {
+      const db = await this._openDb();
+      const uid = String(userId || '');
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readonly');
+        const req = tx.objectStore(STORE).getAll();
+        req.onsuccess = () => {
+          const rows = Array.isArray(req.result) ? req.result : [];
+          const out = [];
+          rows.forEach(row => {
+            if (!row) return;
+            if (uid && String(row.userId || '') !== uid) return;
+            const roomId = String(row.roomId || '').toUpperCase();
+            if (!roomId) return;
+            const doc = row.document;
+            let title = roomId;
+            if (doc && Array.isArray(doc.boards) && doc.boards[0] && doc.boards[0].title) {
+              title = String(doc.boards[0].title).slice(0, 40);
+            }
+            out.push({
+              roomId,
+              title,
+              savedAt: Number(row.savedAt || 0)
+            });
+          });
+          out.sort((a, b) => b.savedAt - a.savedAt);
+          resolve(out);
+        };
+        req.onerror = () => reject(req.error || new Error('列出本机画板失败'));
+      });
+    },
+
     /** 读取「恢复上次画板」勾选偏好。 */
     getRestorePref() {
       try {

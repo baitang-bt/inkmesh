@@ -5,17 +5,15 @@
   const STORAGE_LEVEL = 'collabCanvas.debounceLevel';
   const MAX_LEVEL = 5;
   const DEFAULT_LEVEL = 2;
-  /** 吸收阈值（归一化坐标）：输出点与上一输出点间距小于该值则吞掉，减少冗余线段。 */
-  const ABSORB_DIST = 0.0004;
+  /** 每级惰性半径（归一化坐标）；对齐 lazy-brush：笔尖与指针保持半径距离。 */
+  const RADIUS_PER_LEVEL = 0.004;
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
   /**
-   * 笔画防抖（轨迹平滑）：滑动窗口均值 + 近点吸收。
-   * 级数越高窗口越大，笔画越平滑，跟手延迟略增。
+   * 笔画稳定：惰性半径跟随（参考 https://github.com/dulnan/lazy-brush）。
+   * 只平滑 x/y，不平均、不丢弃 pressure；抬笔时 flushTo 收到真实终点。
    *
-   * 动态防抖（预留）：setBoost(true) 时有效级数临时提到 MAX_LEVEL，
-   * 不持久化；未来可由「按住某按键」或工具栏开关 UI 触发，
-   * 监听 onBoostChange 即可同步 UI 状态。
+   * 动态防抖（预留）：setBoost(true) 时有效级数临时提到 MAX_LEVEL。
    */
   class StrokeSmoother {
     constructor(options) {
@@ -26,8 +24,9 @@
         ? clamp(Math.round(storedLevel), 1, MAX_LEVEL)
         : DEFAULT_LEVEL;
       this._boost = false;
-      this._window = [];
-      this._lastOut = null;
+      this._hasTip = false;
+      this._tipX = 0;
+      this._tipY = 0;
       this.onChange = settings.onChange || (() => {});
       this.onBoostChange = settings.onBoostChange || (() => {});
     }
@@ -85,6 +84,11 @@
       return this._enabled ? this._level : 0;
     }
 
+    /** 当前惰性半径（归一化）。 */
+    radius() {
+      return this.effectiveLevel() * RADIUS_PER_LEVEL;
+    }
+
     /** 供测试画板 / 设置 UI 显示的状态文案。 */
     statusLabel() {
       const level = this.effectiveLevel();
@@ -92,51 +96,50 @@
       return this._boost ? '最高（动态）' : level + ' 级';
     }
 
-    /** 清空平滑窗口，开始/结束一笔时调用。 */
+    /** 清空笔尖，开始一笔时调用。 */
     reset() {
-      this._window.length = 0;
-      this._lastOut = null;
+      this._hasTip = false;
+      this._tipX = 0;
+      this._tipY = 0;
     }
 
     /**
-     * 输入原始点，返回平滑后的点 {x, y, pressure}；
-     * pressure 为窗口内笔压均值（无笔压输入时传 null，输出亦为 null）。
-     * 返回 null 表示该点被吸收（未达到输出间距），调用方应跳过。
+     * 输入原始点，返回平滑后的笔尖 {x, y, pressure}。
+     * 指针在半径内时笔尖不动，返回 null（跳过重复位置）；pressure 原样透传。
      */
     push(x, y, pressure) {
       const level = this.effectiveLevel();
-      if (level <= 0) return { x, y, pressure: Number.isFinite(pressure) ? pressure : null };
+      const p = Number.isFinite(pressure) ? pressure : null;
+      if (level <= 0) return { x, y, pressure: p };
 
-      this._window.push({ x, y, pressure: Number.isFinite(pressure) ? pressure : null });
-      const windowSize = 1 + Math.round(level * 1.5);
-      while (this._window.length > windowSize) this._window.shift();
+      if (!this._hasTip) {
+        this._hasTip = true;
+        this._tipX = x;
+        this._tipY = y;
+        return { x, y, pressure: p };
+      }
 
-      let sumX = 0;
-      let sumY = 0;
-      let sumPressure = 0;
-      let penCount = 0;
-      for (let i = 0; i < this._window.length; i += 1) {
-        const point = this._window[i];
-        sumX += point.x;
-        sumY += point.y;
-        if (point.pressure != null) {
-          sumPressure += point.pressure;
-          penCount += 1;
-        }
-      }
-      const count = this._window.length;
-      const out = {
-        x: sumX / count,
-        y: sumY / count,
-        pressure: penCount ? sumPressure / penCount : null
-      };
-      if (this._lastOut) {
-        const dx = out.x - this._lastOut.x;
-        const dy = out.y - this._lastOut.y;
-        if (dx * dx + dy * dy < ABSORB_DIST * ABSORB_DIST) return null;
-      }
-      this._lastOut = out;
-      return out;
+      const dx = x - this._tipX;
+      const dy = y - this._tipY;
+      const dist = Math.hypot(dx, dy);
+      const radius = this.radius();
+      if (dist <= radius || dist < 1e-12) return null;
+
+      const move = dist - radius;
+      this._tipX += (dx / dist) * move;
+      this._tipY += (dy / dist) * move;
+      return { x: this._tipX, y: this._tipY, pressure: p };
+    }
+
+    /**
+     * 抬笔时把笔尖收到真实坐标（消除惰性滞后），并返回该点。
+     */
+    flushTo(x, y, pressure) {
+      const p = Number.isFinite(pressure) ? pressure : null;
+      this._hasTip = true;
+      this._tipX = x;
+      this._tipY = y;
+      return { x, y, pressure: p };
     }
   }
 

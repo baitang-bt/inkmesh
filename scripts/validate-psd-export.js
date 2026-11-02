@@ -11,7 +11,7 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const PSD_JS = path.join(ROOT, 'app/games/collab_canvas/static/js/psd-export.js');
+const PSD_JS = path.join(ROOT, 'packages/ink-engine/js/board/export/psd-export.js');
 
 function loadPsdExport() {
   const code = fs.readFileSync(PSD_JS, 'utf8');

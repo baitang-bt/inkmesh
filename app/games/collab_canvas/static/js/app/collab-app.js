@@ -20,6 +20,7 @@
   let pendingPbccDocument = null;
   let pendingRestoreLocal = false;
   let restoreAttempted = false;
+  let lobbyHome = null;
 
   const RESERVED = { 'random-room': 1, ws: 1 };
   const ROOM_ID_PATTERN = /^[A-Z0-9][A-Z0-9_-]{1,5}$/;
@@ -82,6 +83,7 @@
     try {
       history.replaceState(null, '', '/collab-canvas');
     } catch (_err) {}
+    if (lobbyHome) lobbyHome.refresh();
   }
 
   function showRoomScreen(roomId) {
@@ -315,6 +317,7 @@
     get boardController() { return boardController; },
     get roomPanel() { return roomPanel; },
     get boardPanel() { return boardPanel; },
+    get lobbyHome() { return lobbyHome; },
     cursorOverlay,
     onlinePrefs,
     nickname,
@@ -486,8 +489,13 @@
     });
   }
 
+  /** 触发本机选择 .pbcc 文件。 */
+  function triggerPbccImport() {
+    if (openPbccInput) openPbccInput.click();
+  }
+
   if (openPbccBtn && openPbccInput) {
-    openPbccBtn.addEventListener('click', () => openPbccInput.click());
+    openPbccBtn.addEventListener('click', () => triggerPbccImport());
     openPbccInput.addEventListener('change', async () => {
       const file = openPbccInput.files && openPbccInput.files[0];
       openPbccInput.value = '';
@@ -496,6 +504,18 @@
         pendingPbccDocument = await PbccFormat.readFile(file);
         if (openPbccHint) openPbccHint.textContent = file.name;
         setJoinError('');
+        const importTitle = global.LobbyHomeTitleFromDocument
+          ? LobbyHomeTitleFromDocument(pendingPbccDocument)
+          : '';
+        const roomId = lobbyHome ? lobbyHome.generateRoomId() : '';
+        if (!roomId) {
+          setJoinError('无法生成房间号');
+          return;
+        }
+        if (global.LobbyHistory && importTitle) {
+          LobbyHistory.rememberRoom(roomId, importTitle);
+        }
+        enterRoom(roomId);
       } catch (err) {
         pendingPbccDocument = null;
         if (openPbccHint) openPbccHint.textContent = '';
@@ -528,9 +548,22 @@
   const leaveRoomBtn = document.getElementById('leaveRoomBtn');
   if (leaveRoomBtn) leaveRoomBtn.addEventListener('click', () => leaveRoom());
 
-  roomInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter') enterRoom(roomInput.value);
-  });
+  if (roomInput) {
+    roomInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') enterRoom(roomInput.value);
+    });
+  }
+
+  if (global.LobbyHome) {
+    lobbyHome = new LobbyHome({
+      root: joinScreen,
+      userId: selfId,
+      onEnterRoom: roomId => enterRoom(roomId),
+      onImportFile: () => triggerPbccImport()
+    });
+    lobbyHome.bind();
+    lobbyHome.refresh();
+  }
 
   const pathRoom = roomIdFromPath() || (boot.initialRoom || '').trim().toUpperCase();
   if (pathRoom && roomInput) roomInput.value = pathRoom;

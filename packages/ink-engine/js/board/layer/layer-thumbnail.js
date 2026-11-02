@@ -13,7 +13,10 @@
       ctx.fillRect(0, 0, size, size);
     },
 
-    /** 将指定图层绘制到离屏 canvas。 */
+    /**
+     * 将指定图层绘制到离屏 canvas。
+     * 优先复用 DrawingBoard 图层位图缓存；否则按 stroke 重放（path 走 drawStroke）。
+     */
     _renderLayerSurface(drawingBoard, strokes, layer) {
       const w = drawingBoard.logicalWidth;
       const h = drawingBoard.logicalHeight;
@@ -24,20 +27,34 @@
       const ctx = surface.getContext('2d');
       ctx.clearRect(0, 0, w, h);
       const opacity = Math.max(0, Math.min(255, Number(layer.opacity != null ? layer.opacity : 255))) / 255;
-      const prev = drawingBoard.context;
-      drawingBoard.context = ctx;
+      const cached = typeof drawingBoard.getLayerCacheCanvas === 'function'
+        ? drawingBoard.getLayerCacheCanvas(layerId)
+        : null;
       ctx.save();
       ctx.globalAlpha = opacity;
+      if (cached) {
+        ctx.drawImage(cached, 0, 0);
+        ctx.restore();
+        return surface;
+      }
+      const StrokePath = global.StrokePath;
+      const prev = drawingBoard.context;
+      drawingBoard.context = ctx;
       (strokes || []).forEach(stroke => {
         if (stroke.active === false) return;
         if (String(stroke.layer_id || 'l_default') !== layerId) return;
+        const style = stroke.segments && stroke.segments[0];
+        if (style && StrokePath && StrokePath.isPathTool(style.tool) && typeof drawingBoard.drawStroke === 'function') {
+          drawingBoard.drawStroke(stroke, ctx);
+          return;
+        }
         (stroke.segments || []).forEach(segment => {
           if ((segment.tool || 'brush') === 'background') return;
           drawingBoard.drawSegment(segment);
         });
       });
-      ctx.restore();
       drawingBoard.context = prev;
+      ctx.restore();
       return surface;
     },
 

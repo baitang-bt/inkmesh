@@ -33,11 +33,13 @@
           return;
         }
         ctx.resetJoinControls();
-        const msg = ctx.session.lastError || '连接已断开，请刷新页面';
         ctx.cursorOverlay.clear();
-        if (ctx.roomScreen && ctx.roomScreen.classList.contains('hidden')) {
-          ctx.setJoinError(msg);
+        const alreadyOnLobby = ctx.roomScreen && ctx.roomScreen.classList.contains('hidden');
+        const msg = ctx.session.lastError || (alreadyOnLobby ? '' : '连接已断开，请刷新页面');
+        if (alreadyOnLobby) {
+          if (msg) ctx.setJoinError(msg);
           ctx.setStatus('');
+          if (ctx.lobbyHome) ctx.lobbyHome.refresh();
           return;
         }
         ctx.setJoinError(msg);
@@ -48,7 +50,9 @@
         ctx.session.disconnect();
         ctx.resetJoinControls();
         ctx.cursorOverlay.clear();
-        ctx.showJoinScreen(data.message || '已离开房间');
+        const msg = (data && data.message) || '';
+        const softLeave = !msg || msg === '已退出房间' || msg === '已离开房间';
+        ctx.showJoinScreen(softLeave ? '' : msg);
       },
       room_state: data => {
         ctx.resetJoinControls();
@@ -69,6 +73,10 @@
               nickname: player.name
             });
           });
+        }
+        if (global.LobbyHistory) {
+          LobbyHistory.rememberRoom(data.room_id);
+          LobbyHistory.rememberPeers(data.players || [], data.self_id, data.room_id);
         }
         if (ctx.boardController && ctx.boardController.finishPbccRestoreIfPending()) {
           /* 恢复成功提示已由 finishPbccRestoreIfPending 设置 */
@@ -150,6 +158,13 @@
           ctx.roomPanel.setPlayers(list);
         }
         if (ctx.boardPanel) ctx.boardPanel.refreshOccupantTree();
+        if (global.LobbyHistory) {
+          LobbyHistory.rememberPeer(
+            { uid: data.player_id, name: data.name },
+            ctx.boardController && ctx.boardController.selfId,
+            ctx.session && ctx.session.roomId
+          );
+        }
         ctx.setStatus(`${data.name} 加入了房间`);
       },
       player_leave: data => {

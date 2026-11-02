@@ -77,10 +77,9 @@
     }
 
     /**
-     * 生成 perfect-freehand 选项；strokePart 控制首尾锥形（start/mid/end/single）。
-     * last 恒为 true：每个 segment 都是独立完成的迷你笔画，轮廓必须到达真实端点，
-     * 否则 last:false 会截短轮廓（streamline 插值到 57.5%），快速长线段之间出现断触。
-     * mid 段关闭 cap，减少短 segment 圆帽叠接缝；opts.simulatePressure 覆盖是否模拟笔压。
+     * 生成 perfect-freehand 选项；strokePart 控制整笔首尾锥形（start/mid/end/single）。
+     * last 恒为 true，轮廓到达真实端点。
+     * opts.simulatePressure / opts.streamline 可覆盖（稳定开启时 streamline 置 0）。
      */
     getStrokeOptions(strokeSizePx, strokePart, opts) {
       const part = strokePart || 'mid';
@@ -91,11 +90,14 @@
       const simulatePressure = opts && opts.simulatePressure != null
         ? Boolean(opts.simulatePressure)
         : true;
+      const streamline = opts && opts.streamline != null
+        ? Number(opts.streamline)
+        : this.streamline;
       return {
         size: strokeSizePx,
         thinning: this.thinning,
         smoothing: this.smoothing,
-        streamline: this.streamline,
+        streamline,
         simulatePressure,
         start: { taper: taperStart, cap: capStart },
         end: { taper: taperEnd, cap: capEnd },

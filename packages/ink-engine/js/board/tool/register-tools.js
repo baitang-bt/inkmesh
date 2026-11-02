@@ -339,14 +339,17 @@
     return { x: x1 + Math.cos(snapped) * len, y: y1 + Math.sin(snapped) * len };
   }
 
+/** 笔刷参数写入 segment；稳定开启时 streamline=0，避免与惰性跟随双重平滑。 */
 function presetSegmentFields(board) {
   const preset = board.brushPreset;
   if (!preset) return {};
+  const smootherOn = board.strokeSmoother && board.strokeSmoother.effectiveLevel() > 0;
   return {
     thinning: preset.thinning,
     smoothing: preset.smoothing,
-    streamline: preset.streamline,
+    streamline: smootherOn ? 0 : preset.streamline,
     opacity: preset.opacity,
+    flow: preset.flow,
     spacing: preset.spacing,
     randomJitter: preset.randomJitter
   };
@@ -358,17 +361,76 @@ function resolveStrokeTool(board, event) {
   return STROKE_DRAW_TOOLS.has(tool) ? tool : 'brush';
 }
 
-/** 从指针采样取归一化点；真实笔压时写入已映射的 0–1 pressure。 */
-function sampleDrawPoint(board, sample, useRealPressure) {
+/**
+ * 从指针采样取归一化点；pressure 语义见 PenInput.pressureForSample。
+ * prevSample 供速度曲线用相邻 coalesced 点。
+ */
+function sampleDrawPoint(board, sample, prevSample) {
   const pt = board.normalizedPoint(sample);
-  let pressure = null;
-  if (useRealPressure && board.penInput.hasRealPressure(sample)) {
-    pressure = board.penInput.mappedPressure(sample.pressure);
-  }
+  const simulate = board._activeSimulatePressure !== false;
+  const pressure = board.penInput.pressureForSample(sample, prevSample, simulate);
   if (board.strokeSmoother) {
     return board.strokeSmoother.push(pt.x, pt.y, pressure);
   }
   return { x: pt.x, y: pt.y, pressure };
+}
+
+/** 将压力夹到 perfect-freehand 可用的 0–1。 */
+function clampPressure(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0.5;
+  return Math.min(1, Math.max(0, n));
+}
+
+/** 把平滑输出点列写成可上送的 points（含可选 pressure）。 */
+function wirePointsFromOuts(outs, simulatePressure) {
+  const points = [];
+  for (let i = 0; i < outs.length; i += 1) {
+    const p = outs[i];
+    const item = { x: p.x, y: p.y };
+    if (!simulatePressure && p.pressure != null) {
+      item.pressure = clampPressure(p.pressure);
+    }
+    points.push(item);
+  }
+  return points;
+}
+
+/**
+ * 发送一段或多段（points>512 时拆分）；只含本批新点。
+ */
+function emitBrushSegments(board, outs) {
+  if (!outs.length) return;
+  const StrokePath = global.StrokePath;
+  const maxPts = StrokePath ? StrokePath.MAX_POINTS_PER_SEGMENT : 512;
+  const simulate = board._activeSimulatePressure !== false;
+  const size = board.penInput.sizeForPressure();
+  const chunks = StrokePath
+    ? StrokePath.chunkPoints(wirePointsFromOuts(outs, simulate), maxPts)
+    : [wirePointsFromOuts(outs, simulate)];
+  for (let c = 0; c < chunks.length; c += 1) {
+    const points = chunks[c];
+    const bounds = StrokePath
+      ? StrokePath.segmentBounds(points)
+      : { x1: points[0].x, y1: points[0].y, x2: points[points.length - 1].x, y2: points[points.length - 1].y };
+    const strokePart = board._strokeSegmentIndex === 0 ? 'start' : 'mid';
+    board._strokeSegmentIndex += 1;
+    const segment = Object.assign({
+      x1: bounds.x1,
+      y1: bounds.y1,
+      x2: bounds.x2,
+      y2: bounds.y2,
+      color: board.currentColor,
+      size,
+      tool: board.activeStrokeTool,
+      strokePart,
+      simulatePressure: simulate,
+      points
+    }, presetSegmentFields(board));
+    board._appendLocalSegment(board.activeStrokeId, segment);
+  }
+  board.lastPoint = outs[outs.length - 1];
+  board._brushHasSegment = true;
 }
 
 function brushDown(board, ctx) {
@@ -383,13 +445,18 @@ function brushDown(board, ctx) {
   board.activeStrokeId = crypto.randomUUID();
   board.activeStrokeTool = resolveStrokeTool(board, event);
   board._strokeSegmentIndex = 0;
-  // 整笔统一：有真实笔压则关闭 simulatePressure，保证本地与远端回放一致。
-  board._activeSimulatePressure = !board.penInput.hasRealPressure(event);
+  board._brushHasSegment = false;
+  board._lastRawSample = event;
+  // 有真实笔压，或开启速度曲线写入点压时，关闭 simulatePressure。
+  const hasReal = board.penInput.hasRealPressure(event);
+  board._activeSimulatePressure = !(hasReal || board.penInput.useSpeedCurve);
   if (board.strokeSmoother) board.strokeSmoother.reset();
-  const out = sampleDrawPoint(board, event, !board._activeSimulatePressure);
+  const out = sampleDrawPoint(board, event, null);
   board.lastPoint = out || board.normalizedPoint(event);
+  board._downPoint = { x: board.lastPoint.x, y: board.lastPoint.y, pressure: board.lastPoint.pressure };
   if (board.recentColors) board.recentColors.push(board.currentColor);
   board.stage.classList.add('stylus-ready');
+  if (typeof board._presentLiveStroke === 'function') board._presentLiveStroke();
   return true;
 }
 
@@ -405,82 +472,101 @@ function brushMove(board, ctx) {
     board.lastPoint = cursorPt;
     return true;
   }
-  const useRealPressure = board._activeSimulatePressure === false;
   const samples = board.penInput.coalescedSamples(event);
   const outs = [];
+  let prevSample = board._lastRawSample || null;
   for (let i = 0; i < samples.length; i += 1) {
-    const out = sampleDrawPoint(board, samples[i], useRealPressure);
+    const sample = samples[i];
+    const out = sampleDrawPoint(board, sample, prevSample);
+    prevSample = sample;
     if (out) outs.push(out);
   }
+  board._lastRawSample = event;
   if (!outs.length) return true;
 
+  // 逐点过滤：只丢掉相对上一已接受点移动不够的采样，避免整批因末点贴近而被丢。
   const minDist = 0.5 / Math.max(board.drawingBoard.logicalWidth, 1);
   const minDist2 = minDist * minDist;
-  const drawPt = outs[outs.length - 1];
-  const dx = drawPt.x - board.lastPoint.x;
-  const dy = drawPt.y - board.lastPoint.y;
-  if (dx * dx + dy * dy < minDist2) return true;
-
-  const sizeEnd = board.penInput.sizeForPressure(
-    drawPt.pressure != null ? drawPt.pressure : 0.5,
-    useRealPressure || drawPt.pressure != null,
-    event,
-    useRealPressure
-  );
-  const strokePart = board._strokeSegmentIndex === 0 ? 'start' : 'mid';
-  board._strokeSegmentIndex += 1;
-
-  const points = [];
-  const chain = [board.lastPoint].concat(outs);
-  // 模拟笔压时点压占位即可（perfect-freehand 用速度估压）；避免对每点重复 sizeForPressure 污染速度采样。
-  const simulatedPointPressure = board.penInput.pressureFromSize(sizeEnd, false);
-  for (let i = 0; i < chain.length; i += 1) {
-    const p = chain[i];
-    const pressure = useRealPressure
-      ? (p.pressure != null ? clampPressure(p.pressure) : 0.5)
-      : simulatedPointPressure;
-    points.push({ x: p.x, y: p.y, pressure });
+  const accepted = [];
+  let prev = board.lastPoint;
+  for (let i = 0; i < outs.length; i += 1) {
+    const pt = outs[i];
+    const dx = pt.x - prev.x;
+    const dy = pt.y - prev.y;
+    if (dx * dx + dy * dy < minDist2) continue;
+    accepted.push(pt);
+    prev = pt;
   }
+  if (!accepted.length) return true;
 
-  const segment = Object.assign({
-    x1: board.lastPoint.x,
-    y1: board.lastPoint.y,
-    x2: drawPt.x,
-    y2: drawPt.y,
-    color: board.currentColor,
-    size: sizeEnd,
-    tool: board.activeStrokeTool,
-    strokePart,
-    simulatePressure: board._activeSimulatePressure !== false,
-    points
-  }, presetSegmentFields(board));
-  board._appendLocalSegment(board.activeStrokeId, segment);
-  board.lastPoint = drawPt;
+  emitBrushSegments(board, accepted);
   return true;
-}
-
-/** 将压力夹到 perfect-freehand 可用的 0–1。 */
-function clampPressure(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0.5;
-  return Math.min(1, Math.max(0, n));
 }
 
 function brushUp(board, ctx) {
   const { event } = ctx;
   if (event.pointerId !== board.activeDrawPointerId) return false;
   if (board.penInput.isStylus(event)) board.penInput.clearPenPointer(event);
+
+  const raw = board.normalizedPoint(event);
+  const tipPressure = board.penInput.pressureForSample(
+    event,
+    board._lastRawSample,
+    board._activeSimulatePressure !== false
+  );
+  if (board.strokeSmoother && typeof board.strokeSmoother.flushTo === 'function') {
+    const flushed = board.strokeSmoother.flushTo(raw.x, raw.y, tipPressure);
+    if (flushed && board.lastPoint) {
+      const dx = flushed.x - board.lastPoint.x;
+      const dy = flushed.y - board.lastPoint.y;
+      if (dx * dx + dy * dy > 1e-12) {
+        emitBrushSegments(board, [flushed]);
+      }
+    } else if (flushed && !board._brushHasSegment) {
+      board._downPoint = flushed;
+    }
+  }
+
+  if (!board._brushHasSegment) {
+    const p = board._downPoint || board.lastPoint || raw;
+    const simulate = board._activeSimulatePressure !== false;
+    const points = [{ x: p.x, y: p.y }];
+    if (!simulate && p.pressure != null) points[0].pressure = clampPressure(p.pressure);
+    const segment = Object.assign({
+      x1: p.x,
+      y1: p.y,
+      x2: p.x,
+      y2: p.y,
+      color: board.currentColor,
+      size: board.penInput.sizeForPressure(),
+      tool: board.activeStrokeTool,
+      strokePart: 'single',
+      simulatePressure: simulate,
+      points
+    }, presetSegmentFields(board));
+    board._appendLocalSegment(board.activeStrokeId, segment);
+    board._brushHasSegment = true;
+  }
+
   board._finalizeActiveStroke();
+  const finishedId = board.activeStrokeId;
   board.isDrawing = false;
   board.activeDrawPointerId = null;
-  board.activeStrokeId = '';
   board.lastPoint = null;
+  board._downPoint = null;
+  board._lastRawSample = null;
   board._strokeSegmentIndex = 0;
   board._activeSimulatePressure = true;
+  board._brushHasSegment = false;
   if (board.strokeSmoother) board.strokeSmoother.reset();
   board.stage.classList.remove('stylus-ready');
   board.adapter.flushSegments();
-  board._redraw();
+  if (typeof board._commitLiveStroke === 'function') {
+    board._commitLiveStroke(finishedId);
+  } else {
+    board._redraw();
+  }
+  board.activeStrokeId = '';
   const pt = board.normalizedPoint(event);
   board._sendCursor(board.activeBoardId, pt.x, pt.y, false);
   return true;

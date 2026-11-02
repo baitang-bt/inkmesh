@@ -29,6 +29,20 @@ def get_games():
     return games
 
 
+def _mount_ink_packages(fastapi_app):
+    """挂载 packages/ink-engine 与 packages/ink-net 静态资源。"""
+    root = Path(__file__).resolve().parents[2]
+    for name in ("ink-engine", "ink-net"):
+        path = root / "packages" / name
+        if not path.is_dir():
+            continue
+        fastapi_app.mount(
+            f"/static/packages/{name}",
+            StaticFiles(directory=str(path)),
+            name=f"pkg-static-{name}",
+        )
+
+
 def register_routers(fastapi_app):
     """注册每个游戏的路由，并挂载其静态资源目录。"""
     for module_name in _iter_game_packages():
@@ -51,6 +65,7 @@ def register_routers(fastapi_app):
             StaticFiles(directory=str(path)),
             name=mount_name,
         )
+    _mount_ink_packages(fastapi_app)
     # 共享 common 静态（drawing-board.js / css）
     common_static = Path(__file__).resolve().parent / "common" / "static"
     if common_static.is_dir():

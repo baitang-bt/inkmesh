@@ -26,7 +26,6 @@
       this.activePenPointers = new Set();
       this.penGuardUntil = 0;
       this.lastPenSample = null;
-      this._lastMotionSample = null;
       this.enabled = localStorage.getItem(STORAGE_PEN) !== '0';
       const sens = Number(localStorage.getItem(STORAGE_SENS));
       this.sensitivity = Number.isFinite(sens) ? clamp(sens / 100, 0.25, 2) : 1;
@@ -44,7 +43,7 @@
 
     /**
      * 触控笔且 pressure 为有效正数时视为真实笔压（供 simulatePressure:false）。
-     * 鼠标/触摸或压力无效时返回 false，继续走速度模拟。
+     * 鼠标/触摸或压力无效时返回 false，继续走速度模拟或 perfect-freehand 估压。
      */
     hasRealPressure(event) {
       if (!this.enabled || !this.isStylus(event)) return false;
@@ -118,50 +117,51 @@
       return curveFn(powered);
     }
 
-    /** 根据指针速度返回线宽倍率（快移变细）。 */
-    _speedModifier(event) {
-      if (!this.useSpeedCurve || !event) return 1;
-      const now = performance.now();
-      const sample = this._lastMotionSample;
-      this._lastMotionSample = { t: now, x: event.clientX, y: event.clientY };
-      if (!sample) return 1;
-      const dt = Math.max(1, now - sample.t);
-      const dist = Math.hypot(event.clientX - sample.x, event.clientY - sample.y);
+    /**
+     * 由相邻两采样的位移估算 0–1 笔压（快移变细）；无上一采样时返回 null。
+     */
+    pressureFromSpeed(prevSample, sample) {
+      if (!this.useSpeedCurve || !sample) return null;
+      if (!prevSample) return 0.85;
+      const t0 = Number(prevSample.timeStamp);
+      const t1 = Number(sample.timeStamp);
+      const dt = Number.isFinite(t0) && Number.isFinite(t1)
+        ? Math.max(1, t1 - t0)
+        : 16;
+      const dist = Math.hypot(
+        Number(sample.clientX) - Number(prevSample.clientX),
+        Number(sample.clientY) - Number(prevSample.clientY)
+      );
       const speed = dist / dt;
       return clamp(1 - speed * 0.015 * this.speedFactor, 0.25, 1);
     }
 
     /**
-     * 按压力值换算线宽。
-     * useRealPressure 时线宽只吃基础尺寸与速度（笔压交给点上的 pressure + simulatePressure:false）。
+     * 为单次采样解析写入点列的 pressure。
+     * simulatePressure=true：返回 null，交给 perfect-freehand 估压。
+     * simulatePressure=false：真实笔压优先，否则速度曲线，再否则 0.5。
      */
-    sizeForPressure(pressure, isStylus, event, useRealPressure) {
-      const base = this.getBaseSize();
-      const speedMod = this._speedModifier(event);
-      if (useRealPressure) {
-        return clamp(Math.round(base * speedMod), 1, 128);
+    pressureForSample(sample, prevSample, simulatePressure) {
+      if (this.hasRealPressure(sample)) {
+        return this.mappedPressure(sample.pressure);
       }
-      if (!this.enabled || !isStylus) {
-        return clamp(Math.round(base * speedMod), 1, 128);
+      if (simulatePressure) return null;
+      if (this.useSpeedCurve) {
+        return this.pressureFromSpeed(prevSample, sample);
       }
-      const curved = this._mapPressure(pressure);
-      const minF = this.sizeRange[0];
-      const maxF = this.sizeRange[1];
-      return clamp(Math.round(base * (minF + (maxF - minF) * curved) * speedMod), 1, 128);
+      return 0.5;
     }
 
-    strokeSize(event) {
-      return this.sizeForPressure(Number(event && event.pressure), this.isStylus(event), event);
+    /**
+     * 笔宽固定为基础尺寸；粗细只由点上 pressure + perfect-freehand thinning 决定。
+     */
+    sizeForPressure(_pressure, _isStylus, _event, _useRealPressure) {
+      return clamp(Math.round(this.getBaseSize()), 1, 128);
     }
 
-    /** 从已渲染线宽反推 perfect-freehand 压力（用于 segment 回放）。 */
-    pressureFromSize(size, isStylus) {
-      const base = this.getBaseSize();
-      if (!base || !isStylus) return 0.5;
-      const minF = this.sizeRange[0];
-      const maxF = this.sizeRange[1];
-      const ratio = clamp((Number(size) / base - minF) / (maxF - minF), 0, 1);
-      return ratio;
+    /** 当前基础笔宽（测试画板 / 预览）。 */
+    strokeSize(_event) {
+      return this.sizeForPressure();
     }
 
     setEnabled(on) {

@@ -154,6 +154,24 @@
     }
 
     /**
+     * 沿归一化点列在像素画板上盖章（折线各边走 Bresenham，避免只走弦）。
+     */
+    stampPixelStrokePath(context, unitPoints, size, color, eraser) {
+      const points = Array.isArray(unitPoints) ? unitPoints : [];
+      if (!points.length || !context) return;
+      if (points.length === 1) {
+        const p = points[0];
+        this.stampPixelStroke(context, p.x, p.y, p.x, p.y, size, color, eraser);
+        return;
+      }
+      for (let i = 1; i < points.length; i += 1) {
+        const a = points[i - 1];
+        const b = points[i];
+        this.stampPixelStroke(context, a.x, a.y, b.x, b.y, size, color, eraser);
+      }
+    }
+
+    /**
      * 在归一化坐标处绘制本地笔刷预览（单点方形笔刷，仅悬停层，不写主画布）。
      * 画笔为半透明填色，橡皮为描边镂空。
      */
@@ -332,16 +350,26 @@
       this.context.fillStyle = fillColor;
       this.context.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
       this.backgroundColor = fillColor;
-      list.filter(stroke => stroke.active !== false).forEach(stroke => stroke.segments.forEach(segment => {
-        if ((segment.tool || 'brush') === 'background') {
-          const color = isHexColor(segment.color) ? segment.color.toLowerCase() : fillColor;
+      const StrokePath = global.StrokePath;
+      list.filter(stroke => stroke.active !== false).forEach(stroke => {
+        const segs = stroke.segments || [];
+        const style = segs[0];
+        if (style && (style.tool || 'brush') === 'background') {
+          const color = isHexColor(style.color) ? style.color.toLowerCase() : fillColor;
           this.backgroundColor = color;
           this.context.fillStyle = color;
           this.context.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
           return;
         }
-        this.drawSegment(segment);
-      }));
+        if (style && StrokePath && StrokePath.isPathTool(style.tool) && typeof this.drawStroke === 'function') {
+          this.drawStroke(stroke, this.context);
+          return;
+        }
+        segs.forEach(segment => {
+          if ((segment.tool || 'brush') === 'background') return;
+          this.drawSegment(segment);
+        });
+      });
       this.context = main;
       this.strokes = previous;
       this.backgroundColor = previousBackground;
