@@ -1,7 +1,12 @@
 name = "inkmesh-signal"
 main = "src/index.js"
-compatibility_date = "2024-11-01"
+compatibility_date = "2024-12-01"
 
-# 免费档单 Isolate 内存房间表；高并发可再升级 Durable Objects。
-[vars]
-# 无额外密钥；信令公开，靠房间号隔离。
+# 一房间一 Durable Object，跨 Isolate 共享房主登记。
+[[durable_objects.bindings]]
+name = "SIGNAL_ROOM"
+class_name = "SignalRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SignalRoom"]

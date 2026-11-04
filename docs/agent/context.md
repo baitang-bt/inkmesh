@@ -2,12 +2,12 @@
 
 > 多 Agent / 多对话共享的项目记忆。Hub `conversations/{标题}.md` 只存指针与本场状态；**可复用的决策与进展写在此文件**。
 >
-> 最后更新：2026-11-04 20:40 +0800
+> 最后更新：2026-11-04 21:50 +0800
 
 ## 当前焦点
 
-- **任务**：公开站 GitHub Pages + PWA + CF Worker；pages-review 已修死房主回收 / SW config / 无 wsUrl 不连同源
-- **下一步**：Worker 若线上需 `wrangler deploy`；Pages 随推送；TURN / 公开房间发现仍未做
+- **任务**：信令 Worker 已迁 Durable Object（一房一 DO）；公开站联机跨 Isolate 修复
+- **下一步**：Pages 随 collab-session 推送；TURN / 公开房间发现仍未做
 - **活跃对话**：inkmesh UI、画板P2P独立工作区、联机连接测试、pages-share
 
 ## 活跃泳道
@@ -38,6 +38,7 @@
 | d4 | 2026-11-02 | 同仓双包：`packages/ink-engine`（画笔）与 `packages/ink-net`（联机 JS + protocol.md）。App 只装配。服务端 WS 暂不拆包（待 P2P）。无 bundler，StaticFiles 挂 `/static/packages/*`。契约见各包 `CONTRACT.md`。 | `packages/*`、`docs/CODE_STRUCTURE.md` |
 | d5 | 2026-11-02 | 大厅用特色 UI（cask 战术终端提示词）。画板工作区维持高效直角 dock。他人光标和名字继续高效 UI：小圆点 + 10px 色标，不上切角和扫光。提示词在 `docs/ui/`，尚未改样式。 | `docs/ui/distinctive-ui.md`、`docs/ui/efficient-ui.md` |
 | d6 | 2026-11-03 | 长期分享：GitHub Pages 静态站 + Cloudflare Worker 信令（`packages/ink-net/signal-worker`）+ PWA/快捷方式。App 只注入 `wsUrl`/`basePath`；本机仍可用 FastAPI `/inkmesh/ws`。 | `deploy/pages/`、`scripts/export-pages.py` |
+| d7 | 2026-11-04 | 公开站信令用 Durable Object（`SignalRoom`，`idFromName(room)`）；WS 须 `?room=`。客户端 collab-session 进房时带 room / 必要时重连。 | `packages/ink-net/signal-worker/`、`collab-session.js` |
 
 ## 进展
 
@@ -53,6 +54,7 @@
 - [x] P2P：信令只登记房间号/转 SDP·ICE；房主 WebRTC 数据通道承载 join/draw；新建房间号 8 位。验收 `JUAPAVQX`，双方 `2/2`，房主一笔同步到房客（`COLLAB_ASSET_VERSION=20261102e`）
 - [x] 公开站：`scripts/export-pages.py`、Pages workflow、PWA「安装/快捷方式」、`packages/ink-net/signal-worker`；App 注入 `wsUrl`/`basePath`（`COLLAB_ASSET_VERSION=20261103i`）
 - [x] pages-review（20261103m）：Worker 死房主 `detachPeer`+`host_gone`；SW `config.json` 网络优先；PWA 在 config 后注册；静态站无 `wsUrl` 不连同源 WS
+- [x] 信令 DO（20261104a）：`SignalRoom` hibernation WS；消除多 Isolate `signal_no_host` 分裂房
 
 ## 关键路径
 
@@ -85,5 +87,5 @@
 - 画笔泳道已 done：后续手测半透明叠笔、点按、抬笔卡顿、旧房间无 points 笔画。
 - 联机：P2P 已接。信令 `signal_store` / `signal_msgs`；客户端 `p2p-transport` + `p2p-host-room` + `CollabSession`。`player_join` 已补 `_updateMemberCount`。TURN 与 DHT 发现未做。
 - P2P 修复（`20261102f`）：ICE 候选队列；忽略 `disconnected`；房主离开先 `room_removed` + 取消房客误重连；数据通道侧强制 `can_draw`。
-- 公开站：需在 CF 部署 `signal-worker` 并把 `wss://…/inkmesh/ws` 写入 `deploy/pages/config.json`；仓库 Pages Source 选 GitHub Actions。
+- 公开站：Worker 已 DO；`config.json` 基址 `wss://inkmesh-signal.inkmesh-max.workers.dev/inkmesh/ws`；客户端自动加 `?room=`。
 - 改静态资源后递增 `routes.py` 的 `COLLAB_ASSET_VERSION`。

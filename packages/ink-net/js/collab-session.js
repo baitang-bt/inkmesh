@@ -49,6 +49,44 @@
       this._guestPeerIdByLink = new WeakMap();
     }
 
+    /** 当前应路由到的信令房间（待进房或已在房）。 */
+    _signalRoomTarget() {
+      if (this._pendingJoin && this._pendingJoin.room) {
+        return normalizeRoomId(this._pendingJoin.room);
+      }
+      return normalizeRoomId(this.roomId);
+    }
+
+    /** 已打开的 WS 是否已带正确的 room 查询参数。 */
+    _wsServesRoom(roomId) {
+      const target = normalizeRoomId(roomId);
+      if (!target) return true;
+      if (!this.ws) return false;
+      if (this.ws.readyState !== WebSocket.OPEN && this.ws.readyState !== WebSocket.CONNECTING) {
+        return false;
+      }
+      try {
+        const href = this.ws.url || '';
+        const url = new URL(href);
+        return normalizeRoomId(url.searchParams.get('room')) === target;
+      } catch (_err) {
+        return false;
+      }
+    }
+
+    /** 为换 room 路由关闭旧信令套接字（不触发进房清理语义）。 */
+    _closeWsForReroute() {
+      const socket = this.ws;
+      this.ws = null;
+      this.connected = false;
+      if (!socket) return;
+      try {
+        socket.close(4000, 'reroute');
+      } catch (_err) {
+        /* ignore */
+      }
+    }
+
     /** 连接信令 WebSocket。 */
     connect() {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
@@ -109,15 +147,18 @@
       });
     }
 
+    /** 组装信令 URL；公开站 Worker 需要 ?room= 才能落到同一 Durable Object。 */
     _buildWsUrl() {
       const base = this.wsUrl || (location.origin.replace(/^http/, 'ws') + '/inkmesh/ws');
-      const params = new URLSearchParams(location.search);
-      const devUser = params.get('dev_user');
-      const devName = params.get('dev_name');
-      if (!devUser && !devName) return base;
-      const url = new URL(base);
+      const url = new URL(base, location.href);
+      const pageParams = new URLSearchParams(location.search);
+      const devUser = pageParams.get('dev_user');
+      const devName = pageParams.get('dev_name');
       if (devUser) url.searchParams.set('dev_user', devUser);
       if (devName) url.searchParams.set('dev_name', devName);
+      const room = this._signalRoomTarget();
+      if (room) url.searchParams.set('room', room);
+      else url.searchParams.delete('room');
       return url.toString();
     }
 
@@ -340,6 +381,11 @@
       const target = normalizeRoomId(roomId);
       if (!target) return;
       this._pendingJoin = { room: target };
+      if (!this._wsServesRoom(target)) {
+        this._closeWsForReroute();
+        this.connect();
+        return;
+      }
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         this.connect();
         return;
@@ -352,6 +398,11 @@
       const target = normalizeRoomId(roomId);
       if (!target) return;
       this._pendingJoin = { room: target };
+      if (!this._wsServesRoom(target)) {
+        this._closeWsForReroute();
+        this.connect();
+        return;
+      }
       this._sendSignal({ type: 'signal_join', room: target });
     }
 
@@ -359,6 +410,12 @@
     _claimHost(roomId) {
       const target = normalizeRoomId(roomId || (this._pendingJoin && this._pendingJoin.room));
       if (!target) return;
+      if (!this._wsServesRoom(target)) {
+        this._pendingJoin = { room: target };
+        this._closeWsForReroute();
+        this.connect();
+        return;
+      }
       this._sendSignal({ type: 'signal_host', room: target });
     }
 
