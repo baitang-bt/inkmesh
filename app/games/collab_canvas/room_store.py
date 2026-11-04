@@ -67,7 +67,7 @@ timed_out_rooms: Dict[str, str] = {}
 
 
 def is_valid_room_path_id(room_id: str) -> bool:
-    """校验可放进 /collab-canvas/{room} 路径的房间号。"""
+    """校验可放进 /inkmesh/{room} 路径的房间号。"""
     return is_valid_deep_link_room_id(room_id, RESERVED_SEGMENTS)
 
 
@@ -398,7 +398,7 @@ def get_reconnect_session(player_id: str) -> Optional[Dict[str, str]]:
     return {
         "game_id": GAME_ID,
         "room_id": room_id,
-        "url": "/collab-canvas/" + quote(room_id, safe=""),
+        "url": "/inkmesh/" + quote(room_id, safe=""),
     }
 
 

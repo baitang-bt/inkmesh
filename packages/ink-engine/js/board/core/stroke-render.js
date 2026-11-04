@@ -96,7 +96,10 @@
         }));
       };
 
-      /** 解析 perfect-freehand 选项（整笔或单段）。 */
+      /**
+       * 解析 perfect-freehand 选项（整笔或单段）。
+       * 几何 taper 读 segment / 预设，缺省 false；strokePart 只控制圆帽。
+       */
       proto._freehandOptionsFor = function(segment, sizePx, strokePart) {
         const part = strokePart || segment.strokePart || 'mid';
         const simulatePressure = segment.simulatePressure == null
@@ -108,16 +111,18 @@
         if (preset && typeof preset.getStrokeOptions === 'function') {
           return preset.getStrokeOptions(sizePx, part, freehandOpts);
         }
-        const taperStart = part === 'start' || part === 'single';
-        const taperEnd = part === 'end' || part === 'single';
+        const taperStart = Boolean(Number(segment.taperStart));
+        const taperEnd = Boolean(Number(segment.taperEnd));
+        const capStart = part === 'start' || part === 'single';
+        const capEnd = part === 'end' || part === 'single';
         return {
           size: sizePx,
           thinning: segment.thinning != null ? Number(segment.thinning) : 0.5,
           smoothing: segment.smoothing != null ? Number(segment.smoothing) : 0.5,
           streamline: segment.streamline != null ? Number(segment.streamline) : 0.5,
           simulatePressure,
-          start: { taper: taperStart, cap: taperStart },
-          end: { taper: taperEnd, cap: taperEnd },
+          start: { taper: taperStart, cap: capStart },
+          end: { taper: taperEnd, cap: capEnd },
           last: true
         };
       };
@@ -355,7 +360,9 @@
         const dest = targetCtx || this.context;
         const strokeStyle = isHexColor(style.color) ? style.color : '#111827';
         const pxPoints = this._unitPointsToPx(unitPoints);
-        const strokePart = StrokePath.wholeStrokePart(stroke);
+        // 整笔每次都画完整点列：预览与抬笔统一用 single（首尾圆帽），
+        // 避免 mid 段关 cap、抬笔才补圆头导致外观跳变。
+        const strokePart = 'single';
         const opacity = style.opacity != null ? clamp(Number(style.opacity), 0, 1) : 1;
         const flow = style.flow != null ? clamp(Number(style.flow), 0, 1) : 1;
         const strokeId = stroke.stroke_id || '';

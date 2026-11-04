@@ -1,6 +1,6 @@
 # ink-net 契约
 
-子对话改本包时只读本文件、`js/**`、`protocol.md`。服务端改动限 `ws_handlers` / `room_store`（同泳道）。
+子对话改本包时只读本文件、`js/**`、`protocol.md`、`signal-worker/**`。服务端改动限 `ws_handlers` / `signal_store` / `room_store`（同泳道；`signal-worker` 归 pages-share）。
 
 ## 禁止
 
@@ -31,7 +31,18 @@ App 把 `send: payload => session.send(payload)` 注入 adapter。Board 只看�
 
 ## 会话（`CollabSession`）
 
-连接、重连、`join` / `leave`、`sendCursor`、`sendPlayerStyle`、踢人与房主权限。细节见 `protocol.md`。
+信令 WebSocket + 房主 WebRTC 数据通道。进房、重连、`send` / `sendCursor` / `sendPlayerStyle`、踢人与房主权限。房主权威见 `p2p-host-room.js`，传输见 `p2p-transport.js`。细节见 `protocol.md`。
+
+App 须注入 `getRoomSnapshot(forPlayerId)`，供房主向新房客下发 `room_state`。可选注入 `wsUrl`（公开站指向 Worker；缺省为同源 `/inkmesh/ws`）。
+
+## 信令宿主
+
+同一套 `signal_*` 可由下列任一宿主实现：
+
+| 宿主 | 路径 |
+|------|------|
+| 本机 FastAPI | `app/games/collab_canvas/ws_handlers/signal_msgs.py` |
+| Cloudflare Worker | `packages/ink-net/signal-worker/` |
 
 ## 改契约
 

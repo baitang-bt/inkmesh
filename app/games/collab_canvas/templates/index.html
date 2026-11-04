@@ -1,12 +1,19 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-{% macro cc(path) %}/static/games/collab-canvas/{{ path }}?v={{ asset_version }}{% endmacro %}
+{% macro cc(path) %}/static/games/inkmesh/{{ path }}?v={{ asset_version }}{% endmacro %}
 {% macro eng(path) %}/static/packages/ink-engine/{{ path }}?v={{ asset_version }}{% endmacro %}
 {% macro net(path) %}/static/packages/ink-net/{{ path }}?v={{ asset_version }}{% endmacro %}
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#1a1a1a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Inkmesh">
   <title>Inkmesh</title>
+  <link rel="manifest" href="/inkmesh/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/inkmesh/icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="/inkmesh/icons/icon.svg">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap">
   <link rel="stylesheet" href="/static/css/site.css">
   <link rel="stylesheet" href="{{ cc('css/drawing-board.css') }}">
@@ -37,11 +44,12 @@
           <div class="lobby-toolbar">
             <div class="lobby-join-row">
               <label class="lobby-sr-only" for="roomInput">房间号</label>
-              <input id="roomInput" type="text" maxlength="6" placeholder="房间号" value="{{ initial_room }}" autocomplete="off">
+              <input id="roomInput" type="text" maxlength="8" placeholder="房间号" value="{{ initial_room }}" autocomplete="off">
               <button type="button" id="joinBtn" class="btn">进入</button>
               <button type="button" id="randomRoomBtn" class="btn" title="随机加入可进入的房间">随机</button>
             </div>
             <button type="button" id="openPbccBtn" class="btn">导入</button>
+            <button type="button" id="pwaInstallBtn" class="btn" title="安装应用或下载网址快捷方式">安装 / 快捷方式</button>
             <button type="button" id="lobbyNewBoardBtn" class="btn lobby-btn-primary">新建画板</button>
             <input type="file" id="openPbccInput" class="join-pbcc-input" accept=".pbcc,application/json" hidden>
           </div>
@@ -67,6 +75,15 @@
       </section>
 
       <aside class="lobby-peers" aria-label="最近一起画过的人">
+        <section class="lobby-profile" aria-label="个人资料">
+          <button type="button" id="lobbyProfileAvatar" class="lobby-profile-avatar" aria-label="昵称颜色">
+            <span id="lobbyProfileInitial" aria-hidden="true"></span>
+          </button>
+          <label class="lobby-profile-fields">
+            <span class="lobby-profile-kicker">昵称</span>
+            <input id="lobbyProfileName" class="lobby-profile-name" type="text" maxlength="24" autocomplete="nickname" spellcheck="false">
+          </label>
+        </section>
         <header class="lobby-peers-header">
           <h2>最近一起画过的人</h2>
         </header>
@@ -417,7 +434,9 @@
     window.COLLAB_BOOT = {
       userId: {{ user_id | tojson }},
       nickname: {{ nickname | tojson }},
-      initialRoom: {{ initial_room | tojson }}
+      initialRoom: {{ initial_room | tojson }},
+      basePath: "/inkmesh",
+      staticMode: false
     };
   </script>
   <script src="{{ eng('js/board/core/perfect-freehand.js') }}"></script>
@@ -475,6 +494,8 @@
   <script src="{{ eng('js/board/export/pbcc-local-store.js') }}"></script>
   <script src="{{ cc('js/app/lobby-history.js') }}"></script>
   <script src="{{ cc('js/app/lobby-home.js') }}"></script>
+  <script src="{{ cc('js/app/lobby-profile.js') }}"></script>
+  <script src="{{ cc('js/app/pwa-install.js') }}"></script>
   <script src="{{ eng('js/board/export/collab-export.js') }}"></script>
   <script src="{{ eng('js/board/export/pbcc-host-service.js') }}"></script>
   <script src="{{ cc('js/app/export-menu.js') }}"></script>
@@ -482,6 +503,8 @@
   <script src="{{ cc('js/app/shortcut-manager.js') }}"></script>
   <script src="{{ net('js/network-monitor.js') }}"></script>
   <script src="{{ cc('js/app/settings-panel.js') }}"></script>
+  <script src="{{ net('js/p2p-transport.js') }}"></script>
+  <script src="{{ net('js/p2p-host-room.js') }}"></script>
   <script src="{{ net('js/collab-session.js') }}"></script>
   <script src="{{ cc('js/app/collab-fullscreen.js') }}"></script>
   <script src="{{ eng('js/board/ui/canvas-watermark.js') }}"></script>

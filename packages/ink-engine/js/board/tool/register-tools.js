@@ -351,7 +351,9 @@ function presetSegmentFields(board) {
     opacity: preset.opacity,
     flow: preset.flow,
     spacing: preset.spacing,
-    randomJitter: preset.randomJitter
+    randomJitter: preset.randomJitter,
+    taperStart: preset.taperStart ? 1 : 0,
+    taperEnd: preset.taperEnd ? 1 : 0
   };
 }
 

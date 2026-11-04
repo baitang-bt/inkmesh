@@ -1,4 +1,4 @@
-/* 进站三栏大厅（Magma 式瘦骨架；主按钮用灰阶，不用蓝） */
+/* 进站三栏大厅。面板与按钮用切角，不用圆角。主按钮用灰阶，不用蓝。 */
 .lobby-home {
   min-height: 100vh;
   display: grid;
@@ -44,7 +44,8 @@
   width: 100%;
   text-align: left;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   border: 1px solid transparent;
   background: transparent;
   color: #a3a3a3;
@@ -107,7 +108,8 @@
 .lobby-join-row input {
   width: 96px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   border: 1px solid #333;
   background: #222;
   color: #f5f5f5;
@@ -117,6 +119,8 @@
 }
 
 .lobby-home .btn {
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   border-color: #3a3a3a;
   background: #262626;
   color: #e5e5e5;
@@ -128,6 +132,7 @@
 
 .lobby-btn-primary,
 .lobby-home .btn.lobby-btn-primary {
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
   background: #e5e5e5;
   color: #141414;
   border-color: #e5e5e5;
@@ -176,7 +181,8 @@
   text-align: left;
   padding: 0;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 0;
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
   border: 1px solid #2e2e2e;
   background: #1c1c1c;
   color: inherit;
@@ -249,6 +255,149 @@
   flex-wrap: wrap;
 }
 
+.lobby-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 10px;
+  background: #1c1c1c;
+  border: 1px solid #2e2e2e;
+  border-radius: 0;
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+}
+
+.lobby-profile-avatar {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  background: #3a3a3a;
+  color: #111;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lobby-color-pop {
+  position: fixed;
+  z-index: 2200;
+  width: 236px;
+  padding: 10px;
+  background: #1a1a1a;
+  border: 1px solid #3a3a3a;
+  border-radius: 0;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  box-shadow: 0 8px 20px rgb(0 0 0 / .45);
+}
+
+.lobby-color-pop.hidden { display: none; }
+
+.lobby-color-square {
+  margin-bottom: 10px;
+}
+
+.lobby-color-square .color-sv-area {
+  width: 148px;
+  height: 148px;
+  max-height: none;
+  aspect-ratio: 1;
+}
+
+.lobby-color-modes {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.lobby-color-mode {
+  flex: 1;
+  padding: 4px 0;
+  border: 1px solid #3a3a3a;
+  border-radius: 0;
+  background: transparent;
+  color: #9a9a9a;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.lobby-color-mode.is-active {
+  background: #e5e5e5;
+  border-color: #e5e5e5;
+  color: #141414;
+}
+
+.lobby-color-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: #9a9a9a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lobby-color-row span {
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.lobby-color-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: #d6d6d6;
+}
+
+.lobby-color-row input[type="number"] {
+  width: 52px;
+  padding: 3px 4px;
+  border: 1px solid #3a3a3a;
+  border-radius: 0;
+  background: #111;
+  color: #f5f5f5;
+  font-size: 12px;
+}
+
+.lobby-profile-fields {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lobby-profile-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #8a8a8a;
+}
+
+.lobby-profile-name {
+  width: 100%;
+  margin: 0;
+  padding: 2px 0 4px;
+  border: 0;
+  border-bottom: 1px solid #3a3a3a;
+  border-radius: 0;
+  background: transparent;
+  color: #f5f5f5;
+  font-size: 14px;
+  font-weight: 650;
+  clip-path: none;
+}
+
+.lobby-profile-name:focus {
+  outline: none;
+  border-bottom-color: #d6d6d6;
+}
+
 .lobby-peers-header h2 {
   margin: 0 0 14px;
   font-size: 14px;
@@ -270,7 +419,8 @@
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 0;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
   background: #222;
   border: 1px solid #2e2e2e;
 }
@@ -278,7 +428,8 @@
 .lobby-peer-avatar {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
   background: #3a3a3a;
   color: #e5e5e5;
   display: flex;

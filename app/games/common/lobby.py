@@ -14,13 +14,14 @@ from typing import Dict, Iterable, List, Optional, Sequence, Set
 
 RANDOM_ROOM_ALPHABET = string.ascii_uppercase + string.digits
 RANDOM_ROOM_FIRST_CHARS = RANDOM_ROOM_ALPHABET.replace("P", "")
-MAX_ROOM_ID_LENGTH = 6
+MAX_ROOM_ID_LENGTH = 8
+ROOM_ID_GENERATE_LENGTH = 8
 
 
 def is_valid_deep_link_room_id(
     room_id: str, reserved_segments: Iterable[str] | None = None
 ) -> bool:
-    """校验可放进 /{game}/{room} 路径的房间号（2–6 位）。"""
+    """校验可放进 /{game}/{room} 路径的房间号（2–8 位字母数字）。"""
     text = str(room_id or "").strip()
     if len(text) < 2 or len(text) > MAX_ROOM_ID_LENGTH:
         return False
@@ -60,17 +61,20 @@ def list_joinable_collab_rooms(rooms: Dict[str, Dict]) -> List[str]:
 
 
 def generate_random_room_id(rooms: Dict[str, Dict]) -> str:
-    """生成 4 位大写字母+数字房间号；首字符绝不使用 P。"""
-    for _ in range(64):
-        code = random.choice(RANDOM_ROOM_FIRST_CHARS) + "".join(
-            random.choices(RANDOM_ROOM_ALPHABET, k=3)
+    """生成 8 位大写字母+数字房间号；首字符绝不使用 P。"""
+    tail_len = ROOM_ID_GENERATE_LENGTH - 1
+
+    def _one() -> str:
+        return random.choice(RANDOM_ROOM_FIRST_CHARS) + "".join(
+            random.choices(RANDOM_ROOM_ALPHABET, k=tail_len)
         )
+
+    for _ in range(64):
+        code = _one()
         if code not in rooms:
             return code
     while True:
-        code = random.choice(RANDOM_ROOM_FIRST_CHARS) + "".join(
-            random.choices(RANDOM_ROOM_ALPHABET, k=3)
-        )
+        code = _one()
         if code not in rooms:
             return code
 

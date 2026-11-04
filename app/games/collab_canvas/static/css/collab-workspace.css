@@ -47,6 +47,12 @@
   outline: none;
   box-shadow: none;
 }
+/* 盖住全局 button 的 10px 圆角。色轮和他人光标不在这些容器里。 */
+.room-screen button,
+.settings-modal button,
+.room-panel-modal button {
+  border-radius: 0;
+}
 .room-screen button:focus,
 .room-screen button:focus-visible,
 .room-screen .tool-rail-btn:focus,
@@ -63,7 +69,8 @@
 }
 .ws-tooltip {
   position: fixed;
-  z-index: 2000;
+  /* 高于工具 flyout(2000)、图层菜单(2100)、轮盘(2500)和设置(3000)。 */
+  z-index: 4000;
   padding: 4px 8px;
   font-size: 11px;
   font-weight: 600;
@@ -370,7 +377,7 @@ body.is-dock-split-dragging * {
   gap: 0;
   padding: 2px;
   border: 1px solid var(--ws-line);
-  border-radius: 4px;
+  border-radius: 0;
   background: #3d3d3d;
   box-shadow: 0 4px 14px rgb(0 0 0 / .35);
   pointer-events: auto;
@@ -382,7 +389,7 @@ body.is-dock-split-dragging * {
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: 2px;
+  border-radius: 0;
   background: transparent;
   color: #e8e8e8;
   cursor: pointer;

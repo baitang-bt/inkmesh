@@ -59,7 +59,7 @@ html.is-collab-pseudo-fullscreen .room-screen {
   min-height: 0;
 }
 
-/* —— 加入房间页（保留圆角卡片） —— */
+/* 旧加入卡片。大厅切角在 lobby.css，这里的圆角不要再套到 .lobby-home 上。 */
 .join-screen {
   min-height: 100vh;
   display: flex;

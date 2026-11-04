@@ -33,7 +33,7 @@
       if (Array.isArray(data.points) && data.points.length) segment.points = data.points;
       if (data.strokePart) segment.strokePart = data.strokePart;
       if (data.simulatePressure != null) segment.simulatePressure = Boolean(data.simulatePressure);
-      ['thinning', 'smoothing', 'streamline', 'opacity', 'flow', 'spacing', 'randomJitter'].forEach(key => {
+      ['thinning', 'smoothing', 'streamline', 'opacity', 'flow', 'spacing', 'randomJitter', 'taperStart', 'taperEnd'].forEach(key => {
         if (data[key] != null) segment[key] = data[key];
       });
       return segment;

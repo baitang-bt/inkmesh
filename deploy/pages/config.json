@@ -1,0 +1,4 @@
+{
+  "basePath": "/inkmesh",
+  "wsUrl": "wss://inkmesh-signal.inkmesh-max.workers.dev/inkmesh/ws"
+}

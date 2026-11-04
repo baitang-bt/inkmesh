@@ -11,7 +11,7 @@
 |---------|----------|----------|
 | **ink-engine** | `packages/ink-engine/js/board/` | `/static/packages/ink-engine/` |
 | **ink-net** | `packages/ink-net/js/` | `/static/packages/ink-net/` |
-| **App** | `app/games/collab_canvas/static/js/app/` | `/static/games/collab-canvas/` |
+| **App** | `app/games/collab_canvas/static/js/app/` | `/static/games/inkmesh/` |
 
 当前 `COLLAB_ASSET_VERSION`：见 `app/games/collab_canvas/routes.py`。
 
@@ -99,7 +99,9 @@
 
 | 文件 | 一句话 |
 |------|--------|
-| `collab-session.js` | WebSocket 连接、发送、重连 |
+| `collab-session.js` | 信令 WS + 房主 WebRTC；进房/发送/重连 |
+| `p2p-transport.js` | RTCPeerConnection 与数据通道 |
+| `p2p-host-room.js` | 房主成员表与初始 room_state |
 | `collab-board-adapter.js` | draw 批量、历史、repair、PBCC sync/import |
 | `board-commands.js` | 图层/画板 CRUD `session.send` |
 | `collab-message-handlers.js` | 入站 `handle*` → Board |
@@ -112,10 +114,19 @@
 | 路径 | 一句话 |
 |------|--------|
 | `app/games/collab_canvas/routes.py` | HTTP + 薄 WS 入口 |
-| `room_store.py` | 内存房间 |
-| `ws_handlers/*` | join / board / layer / draw / host |
+| `signal_store.py` | 信令：房间号 → 房主连接 |
+| `room_store.py` | 旧内存房间辅助（序列化等） |
+| `ws_handlers/*` | 信令主循环；历史 join/draw 文件暂留 |
 | `protocol.py` | 协议常量 |
 | `app/games/common/drawing_board.py` | 权威校验（engine 泳道文档所有） |
+
+**公开站信令（pages-share，仍属 ink-net 包）：**
+
+| 路径 | 一句话 |
+|------|--------|
+| `packages/ink-net/signal-worker/` | Cloudflare Worker，同 `signal_*` 协议 |
+| `scripts/export-pages.py` | 导出 `dist/pages` 给 GitHub Pages |
+| `deploy/pages/config.json` | `basePath` + `wsUrl`（指向 Worker） |
 
 ---
 

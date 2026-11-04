@@ -86,6 +86,98 @@
       this._playersSnapshot = Array.isArray(players) ? players.slice() : [];
     };
 
+      /**
+       * 房主权威：处理 undo/redo/clear/layer_create，返回需下发的消息列表。
+       * @param {string} playerId 操作者
+       * @param {object} data 原始上行消息
+       * @returns {Array|null}
+       */
+      proto.runP2pHostAuthority = function(playerId, data) {
+        if (!data || !data.type) return null;
+        if (!this._p2pRedoByPlayer) this._p2pRedoByPlayer = {};
+        const type = data.type;
+        if (type === 'undo' || type === 'redo') {
+          const stack = this._p2pRedoByPlayer[playerId] || (this._p2pRedoByPlayer[playerId] = []);
+          let stroke = null;
+          if (type === 'undo') {
+            stroke = this.drawingBoard.undoLatest(this.strokes, stack, playerId);
+          } else {
+            stroke = this.drawingBoard.redoLatest(stack);
+          }
+          if (!stroke) return [];
+          this._redraw();
+          return [{
+            type: 'stroke_visibility',
+            board_id: data.board_id || this.activeBoardId,
+            layer_id: stroke.layer_id || data.layer_id || this.activeLayerId,
+            stroke_id: stroke.stroke_id,
+            owner_id: stroke.owner_id || playerId,
+            visible: type === 'redo'
+          }];
+        }
+        if (type === 'clear') {
+          this.handleClear(data);
+          return [{
+            type: 'clear',
+            board_id: data.board_id || this.activeBoardId,
+            layer_id: data.layer_id || this.activeLayerId
+          }];
+        }
+        if (type === 'layer_create') {
+          const pendingId = this._pendingLayerCreateId;
+          const pending = pendingId && this.layersMeta.find(l => l.layer_id === pendingId);
+          const layer = pending
+            ? this._normalizeLayerMeta(Object.assign({}, pending, {
+              layer_id: 'l_' + Date.now().toString(36)
+            }))
+            : this._normalizeLayerMeta({
+              layer_id: 'l_' + Date.now().toString(36),
+              name: data.name || '图层',
+              kind: data.kind || 'paint',
+              parent_id: data.parent_id || '',
+              visible: true,
+              opacity: 255,
+              locked: false,
+              order: (this.layersMeta.reduce((m, l) => Math.max(m, l.order || 0), 0) + 1)
+            });
+          return [{
+            type: 'layer_added',
+            board_id: data.board_id || this.activeBoardId,
+            layer,
+            created_by: playerId
+          }];
+        }
+        return null;
+      };
+
+      /** 为加入的房客构造 room_state 快照（当前画板笔迹 + 成员表）。 */
+      proto.buildP2pSnapshot = function(forPlayerId) {
+        const canvas = (this.boardsMeta[0] && this.boardsMeta[0].canvas) || {
+          mode: 'vector',
+          width: 1920,
+          height: 1080
+        };
+        const players = this.getPlayersSnapshot().slice();
+        return {
+          type: 'room_state',
+          protocolVersion: 2,
+          room_id: (this.session && this.session.roomId) || '',
+          self_id: forPlayerId,
+          owner_id: this.ownerId || this.selfId,
+          players,
+          boards: this.boardsMeta.length
+            ? this.boardsMeta
+            : [{ board_id: 'b_default', title: '画板 1', canvas, created_at: 0, created_by: '' }],
+          board_order: this.boardOrder.length ? this.boardOrder : ['b_default'],
+          active_board_id: this.activeBoardId || 'b_default',
+          active_layer_id: this.activeLayerId || 'l_default',
+          layers: this.layersMeta || [],
+          strokes: DrawingBoard.cloneStrokes(this.strokes || []),
+          canvas,
+          last_board_create_at: 0
+        };
+      };
+
       proto.handleDrawingSync = function(data) {
       if (data.board_id && data.board_id !== this.activeBoardId) return;
       if (data.layers) {

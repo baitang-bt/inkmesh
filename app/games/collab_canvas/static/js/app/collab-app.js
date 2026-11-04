@@ -4,6 +4,8 @@
   const boot = window.COLLAB_BOOT || {};
   const selfId = boot.userId || '';
   const nickname = boot.nickname || '';
+  let basePath = String(boot.basePath || '/inkmesh').replace(/\/$/, '') || '/inkmesh';
+  let runtimeWsUrl = '';
 
   const joinScreen = document.getElementById('joinScreen');
   const roomScreen = document.getElementById('roomScreen');
@@ -21,10 +23,39 @@
   let pendingRestoreLocal = false;
   let restoreAttempted = false;
   let lobbyHome = null;
+  let lobbyProfile = null;
 
   const RESERVED = { 'random-room': 1, ws: 1 };
-  const ROOM_ID_PATTERN = /^[A-Z0-9][A-Z0-9_-]{1,5}$/;
-  const ROOM_ID_MAX_LEN = 6;
+  const ROOM_ID_PATTERN = /^[A-Z0-9][A-Z0-9_-]{1,7}$/;
+  const ROOM_ID_MAX_LEN = 8;
+  const ROOM_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const ROOM_FIRST = ROOM_ALPHABET.replace('P', '');
+
+  /** 拉取 Pages/本地可选 config.json（wsUrl、basePath）。 */
+  async function loadRuntimeConfig() {
+    try {
+      const res = await fetch(basePath + '/config.json', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && typeof data.basePath === 'string' && data.basePath.trim()) {
+        basePath = String(data.basePath).replace(/\/$/, '') || basePath;
+      }
+      if (data && typeof data.wsUrl === 'string' && data.wsUrl.trim()) {
+        runtimeWsUrl = data.wsUrl.trim();
+      }
+    } catch (_err) {
+      // 本地 FastAPI 无 config.json 时保持同源信令。
+    }
+  }
+
+  /** 生成本地 8 位房间号（静态站无 /random-room API 时使用）。 */
+  function generateLocalRoomId() {
+    let code = ROOM_FIRST.charAt(Math.floor(Math.random() * ROOM_FIRST.length));
+    for (let i = 0; i < ROOM_ID_MAX_LEN - 1; i += 1) {
+      code += ROOM_ALPHABET.charAt(Math.floor(Math.random() * ROOM_ALPHABET.length));
+    }
+    return code;
+  }
 
   function setJoinError(text) {
     if (joinErrorEl) joinErrorEl.textContent = text || '';
@@ -44,7 +75,10 @@
   }
 
   function roomIdFromPath() {
-    const match = String(location.pathname || '').match(/^\/collab-canvas\/([^/]+)\/?$/i);
+    const escaped = basePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = String(location.pathname || '').match(
+      new RegExp('^' + escaped + '/([^/]+)/?$', 'i')
+    );
     if (!match) return '';
     let id = '';
     try {
@@ -60,13 +94,13 @@
   function roomShareUrl(roomId) {
     const id = String(roomId || '').trim();
     if (!id) return '';
-    return location.origin + '/collab-canvas/' + encodeURIComponent(id);
+    return location.origin + basePath + '/' + encodeURIComponent(id);
   }
 
   function syncRoomDeepLink(roomId) {
     const id = String(roomId || '').trim().toUpperCase();
     if (!id) return;
-    const target = '/collab-canvas/' + encodeURIComponent(id);
+    const target = basePath + '/' + encodeURIComponent(id);
     if (location.pathname === target) return;
     try {
       history.replaceState(null, '', target);
@@ -81,7 +115,7 @@
     setJoinStatus('');
     setStatus('');
     try {
-      history.replaceState(null, '', '/collab-canvas');
+      history.replaceState(null, '', basePath);
     } catch (_err) {}
     if (lobbyHome) lobbyHome.refresh();
   }
@@ -115,6 +149,8 @@
         roomPanel.setPlayers(list);
       }
     }
+    if (lobbyProfile) lobbyProfile.refresh();
+    if (settingsPanel && settingsPanel.syncOnlineFromPrefs) settingsPanel.syncOnlineFromPrefs();
   };
 
   const canvas = document.getElementById('drawCanvas');
@@ -334,7 +370,16 @@
   session = new CollabSession({
     selfId,
     nickname,
+    wsUrl: runtimeWsUrl,
     getDisplayName: () => onlinePrefs.resolveDisplayName(nickname),
+    getRoomSnapshot: forPlayerId => {
+      if (!boardController || !boardController.buildP2pSnapshot) return null;
+      return boardController.buildP2pSnapshot(forPlayerId);
+    },
+    runHostAuthority: (playerId, data) => {
+      if (!boardController || !boardController.runP2pHostAuthority) return null;
+      return boardController.runP2pHostAuthority(playerId, data);
+    },
     handlers: createCollabAppSessionHandlers(sessionCtx)
   });
 
@@ -462,7 +507,7 @@
       return;
     }
     if (!ROOM_ID_PATTERN.test(id)) {
-      setJoinError('房间号须为 2–6 位字母或数字');
+      setJoinError('房间号须为 2–8 位字母或数字');
       return;
     }
     setJoinError('');
@@ -535,12 +580,17 @@
   if (randomRoomBtn) {
     randomRoomBtn.addEventListener('click', async () => {
       try {
-        const response = await fetch('/collab-canvas/random-room', { headers: { Accept: 'application/json' } });
-        if (!response.ok) throw new Error('获取随机房间号失败');
+        const response = await fetch(basePath + '/random-room', { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error('api');
         const data = await response.json();
-        if (data.room_id) roomInput.value = data.room_id;
-      } catch (err) {
-        setJoinError(err.message || '获取随机房间号失败');
+        if (data.room_id) {
+          roomInput.value = data.room_id;
+          return;
+        }
+        throw new Error('api');
+      } catch (_err) {
+        roomInput.value = generateLocalRoomId();
+        setJoinStatus('已生成本地房间号');
       }
     });
   }
@@ -565,20 +615,42 @@
     lobbyHome.refresh();
   }
 
-  const pathRoom = roomIdFromPath() || (boot.initialRoom || '').trim().toUpperCase();
-  if (pathRoom && roomInput) roomInput.value = pathRoom;
-
-  if (pathRoom) {
-    pendingRestoreLocal = Boolean(restoreCheckbox && restoreCheckbox.checked);
-    restoreAttempted = false;
-    setStatus('正在进入房间…');
-    if (joinBtn) joinBtn.disabled = true;
-    session.joinRoom(pathRoom);
+  if (global.LobbyProfile) {
+    lobbyProfile = new LobbyProfile({
+      onlinePrefs,
+      passportNickname: nickname,
+      playerId: selfId
+    });
+    lobbyProfile.bind();
   }
-
-  session.connect();
 
   if (typeof createCollabFullscreen === 'function') {
     createCollabFullscreen();
   }
+
+  /** 读完可选 config 后再注册 PWA / 连信令，保证 basePath 与 wsUrl 已生效。 */
+  loadRuntimeConfig().then(() => {
+    if (runtimeWsUrl) session.wsUrl = runtimeWsUrl;
+    if (typeof createPwaInstall === 'function') {
+      createPwaInstall({
+        basePath,
+        setStatus: setJoinStatus
+      }).bind();
+    }
+    // 静态站无 Worker 地址时不要连同源 /inkmesh/ws（Pages 上必失败）。
+    if (boot.staticMode && !runtimeWsUrl) {
+      setJoinStatus('公开站尚未配置信令 wsUrl（deploy/pages/config.json）；大厅可用，联机需部署 Worker');
+      return;
+    }
+    const pathRoom = roomIdFromPath() || (boot.initialRoom || '').trim().toUpperCase();
+    if (pathRoom && roomInput) roomInput.value = pathRoom;
+    if (pathRoom) {
+      pendingRestoreLocal = Boolean(restoreCheckbox && restoreCheckbox.checked);
+      restoreAttempted = false;
+      setStatus('正在进入房间…');
+      if (joinBtn) joinBtn.disabled = true;
+      session.joinRoom(pathRoom);
+    }
+    session.connect();
+  });
 })(window);

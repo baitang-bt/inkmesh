@@ -88,8 +88,8 @@
     },
 
     /**
-     * 整笔锥形：未完成用 start/mid；完成用 single（首尾锥形）。
-     * 单段且已是 single 则保持。
+     * 整笔端点角色：未完成用 start/mid；完成用 single（首尾圆帽）。
+     * 几何 taper 由 segment.taper* 决定，不因 single 强制打开。
      */
     wholeStrokePart(stroke) {
       const segments = stroke && Array.isArray(stroke.segments) ? stroke.segments : [];

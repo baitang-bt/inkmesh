@@ -9,7 +9,7 @@
 所有 `static/js/*.js`、`static/css/*.css` 都由模板经 `cc()` 宏拼上 `?v={{ asset_version }}`：
 
 ```jinja
-{% macro cc(path) %}/static/games/collab-canvas/{{ path }}?v={{ asset_version }}{% endmacro %}
+{% macro cc(path) %}/static/games/inkmesh/{{ path }}?v={{ asset_version }}{% endmacro %}
 ```
 
 版本号来自 `routes.py`：
@@ -39,7 +39,7 @@ deploy-worktree 里的版本号应已被同步为本地源的最新值。
 
 ```bash
 cd /Users/max/Documents/Cursor/projects/potatogame/potatoblock-collab-canvas
-python run_local.py    # http://127.0.0.1:8101/collab-canvas
+python run_local.py    # http://127.0.0.1:8101/inkmesh
 ```
 
 改过 UI / 交互后，最好确认页面无 JS 报错、新功能可用。
@@ -64,7 +64,7 @@ python3 /Users/max/.cursor/skills/potatoblock-deploy/scripts/push-github.py \
 ## 部署后验证
 
 1. 在 GitHub 仓库 Actions 页看 `CD — Deploy to MCSManager` 是否成功。
-2. 打开 `https://game.potatoblock.com/collab-canvas`，强刷（Cmd/Ctrl+Shift+R），确认页面加载的是新版本号：
+2. 打开本地或部署地址的 `/inkmesh`，强刷（Cmd/Ctrl+Shift+R），确认页面加载的是新版本号：
    - 查看 Network 里 `index.html` 引用的 `collab-export.js?v=...` 等资源，`v=` 应等于新版本号。
 3. 冒烟新功能（例如笔刷防抖、画布尺寸、导出格式）。
 

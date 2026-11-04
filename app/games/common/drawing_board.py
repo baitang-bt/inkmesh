@@ -28,6 +28,9 @@ BRUSH_PARAM_RANGES = {
     "flow": (0.0, 1.0, 1.0),
     "spacing": (0.0, 2.0, 0.25),
     "randomJitter": (0.0, 1.0, 0.0),
+    # 几何锥形默认关；粗细跟点压，避免强制首尾淡入淡出。
+    "taperStart": (0.0, 1.0, 0.0),
+    "taperEnd": (0.0, 1.0, 0.0),
 }
 HEX_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 VECTOR_CANVAS_WIDTH = 1920

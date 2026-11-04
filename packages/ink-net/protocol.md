@@ -1,17 +1,47 @@
-# 合作画板 WebSocket 协议
+# 合作画板联机协议
 
 ## 版本
 
 | protocolVersion | 说明 |
 |-----------------|------|
 | 1 | 单平面 strokes，无图层 |
-| **2** | 多图层、layer_id on strokes |
+| **2** | 多图层、layer_id on strokes；进房/笔迹走房主 WebRTC 数据通道 |
 
 当前：**2**
 
 坐标均为 **0–1 归一化**；压感在客户端映射为 `size` 后上送。
 
-## 房间状态（服务端）
+## 房间号
+
+- 字符：大写字母 `A–Z` 与数字 `0–9`（路径里仍允许 `_` `-` 以便旧链）
+- 长度：手输 **2–8** 位；**新建**固定 **8** 位
+- 首位不用 `P`（保留给其它模式）
+
+## 传输分层
+
+| 通道 | 职责 |
+|------|------|
+| 信令 WebSocket `/inkmesh/ws`（或配置的 `wsUrl`） | 登记房间号、转交 SDP / ICE；**不存**笔迹 |
+| 房主 ↔ 房客 WebRTC 数据通道 | `join` / `room_state` / `draw` / 图层画板 / 权限 |
+
+信令宿主可换：本机 FastAPI，或 `packages/ink-net/signal-worker`（Cloudflare Worker）。消息类型不变。
+
+房主浏览器是房间权威；房客只连房主。
+
+### 信令消息
+
+| type | 方向 | 说明 |
+|------|------|------|
+| `signal_hello` | S→C | `peer_id` |
+| `signal_join` | C→S | `room`；无房主则回 `signal_no_host` |
+| `signal_no_host` | S→C | 可转 `signal_host` |
+| `signal_host` | C→S | 登记为该房间房主 |
+| `signal_hosted` | S→C | 登记成功 |
+| `signal_peer` | S→C | 房客：`host_id` |
+| `signal_offer` / `signal_answer` / `signal_ice` | 双向经 S | `to_id`、`from_id`、`sdp` 或 `candidate` |
+| `signal_host_gone` | S→C | 房主断开 |
+
+## 房间状态（房主权威）
 
 - `boards[board_id]`: `{ board_id, title, layers[], strokes[], redo{}, canvas, ... }`
 - `layers[]`: `{ layer_id, name, kind, parent_id, visible, opacity, locked, order }`

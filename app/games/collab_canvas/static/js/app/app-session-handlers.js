@@ -139,7 +139,7 @@
       },
       player_join: data => {
         ctx.cursorOverlay.setPlayerStyle(data.player_id, data);
-        if (ctx.roomPanel) {
+        if (ctx.boardController) {
           const list = ctx.boardController.getPlayersSnapshot().slice();
           const idx = list.findIndex(p => p.uid === data.player_id);
           const row = {
@@ -155,7 +155,8 @@
           if (idx >= 0) list[idx] = Object.assign({}, list[idx], row);
           else list.push(row);
           ctx.boardController.setPlayersSnapshot(list);
-          ctx.roomPanel.setPlayers(list);
+          ctx.boardController._updateMemberCount(list);
+          if (ctx.roomPanel) ctx.roomPanel.setPlayers(list);
         }
         if (ctx.boardPanel) ctx.boardPanel.refreshOccupantTree();
         if (global.LobbyHistory) {

@@ -1,0 +1,7 @@
+name = "inkmesh-signal"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# 免费档单 Isolate 内存房间表；高并发可再升级 Durable Objects。
+[vars]
+# 无额外密钥；信令公开，靠房间号隔离。

@@ -20,5 +20,5 @@ app.mount(
 
 @app.get("/")
 async def index():
-    """根路径跳转到合作画板。"""
-    return RedirectResponse(url="/collab-canvas")
+    """根路径跳转到 Inkmesh 首页。"""
+    return RedirectResponse(url="/inkmesh")

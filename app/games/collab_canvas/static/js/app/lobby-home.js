@@ -89,12 +89,12 @@
       this.refresh();
     }
 
-    /** 生成非 P 开头的 4 位房间号。 */
+    /** 生成非 P 开头的 8 位大写字母+数字房间号。 */
     generateRoomId() {
       let code = '';
       for (let i = 0; i < 8; i += 1) {
         code = ROOM_FIRST.charAt(Math.floor(Math.random() * ROOM_FIRST.length));
-        for (let j = 0; j < 3; j += 1) {
+        for (let j = 0; j < 7; j += 1) {
           code += ROOM_ALPHABET.charAt(Math.floor(Math.random() * ROOM_ALPHABET.length));
         }
         if (!global.LobbyHistory || !LobbyHistory.listRooms().some(row => row.roomId === code)) {

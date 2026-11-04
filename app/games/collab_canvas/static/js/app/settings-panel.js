@@ -247,26 +247,33 @@
       }
     }
 
+    /**
+     * 用 OnlinePrefs 刷新联机昵称、色块和预览。
+     * 大厅改同一份偏好时调用，避免设置弹窗还显示旧值。
+     */
+    syncOnlineFromPrefs() {
+      if (!this.onlinePrefs) return;
+      const usePassport = this.onlinePrefs.getUsePassportName();
+      if (this.usePassportToggle) this.usePassportToggle.checked = usePassport;
+      if (this.displayNameInput && document.activeElement !== this.displayNameInput) {
+        this.displayNameInput.value = this.onlinePrefs.getCustomDisplayName();
+      }
+      if (this.displayNameInput) this.displayNameInput.disabled = usePassport;
+      const stored = this.onlinePrefs.getLabelColor();
+      if (this._labelColorSurface && stored && this._labelColorSurface.color !== stored) {
+        this._labelColorSurface.setColor(stored);
+      }
+      if (!this.labelPreview) return;
+      const labelColor = stored || defaultLabelColor('self-preview');
+      this.labelPreview.textContent = this.onlinePrefs.resolveDisplayName(this.getNickname());
+      this.labelPreview.style.background = labelColor;
+      this.labelPreview.style.color = contrastText(labelColor);
+    }
+
     /** 联机 Tab：显示名称、标签底色与预览。 */
     _bindOnline() {
       if (!this.onlinePrefs) return;
-      const syncPreview = () => {
-        if (!this.labelPreview) return;
-        const stored = this.onlinePrefs.getLabelColor();
-        const labelColor = stored || defaultLabelColor('self-preview');
-        this.labelPreview.textContent = this.onlinePrefs.resolveDisplayName(this.getNickname());
-        this.labelPreview.style.background = labelColor;
-        this.labelPreview.style.color = contrastText(labelColor);
-      };
-      const syncNameControls = () => {
-        const usePassport = this.onlinePrefs.getUsePassportName();
-        if (this.usePassportToggle) this.usePassportToggle.checked = usePassport;
-        if (this.displayNameInput) {
-          this.displayNameInput.value = this.onlinePrefs.getCustomDisplayName();
-          this.displayNameInput.disabled = usePassport;
-        }
-        syncPreview();
-      };
+      const syncNameControls = () => this.syncOnlineFromPrefs();
       const pushStyle = () => {
         if (!this.session) return;
         this.session.sendPlayerStyle({
@@ -287,7 +294,7 @@
           showRgbSliders: true,
           onChange: hex => {
             this.onlinePrefs.setLabelColor(hex);
-            syncPreview();
+            this.syncOnlineFromPrefs();
             pushStyle();
           },
           onCommit: () => {}

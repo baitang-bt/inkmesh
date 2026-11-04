@@ -8,8 +8,9 @@
       thinning: 0.5,
       smoothing: 0.5,
       streamline: 0.5,
-      taperStart: true,
-      taperEnd: true,
+      // 默认关几何锥形：粗细只跟点压 + thinning，避免强制针尖淡入淡出。
+      taperStart: false,
+      taperEnd: false,
       opacity: 1,
       flow: 1,
       spacing: 0.25,
@@ -19,8 +20,8 @@
       thinning: 0.5,
       smoothing: 0.5,
       streamline: 0.5,
-      taperStart: true,
-      taperEnd: true,
+      taperStart: false,
+      taperEnd: false,
       opacity: 1,
       flow: 1,
       spacing: 0.25,
@@ -77,14 +78,15 @@
     }
 
     /**
-     * 生成 perfect-freehand 选项；strokePart 控制整笔首尾锥形（start/mid/end/single）。
+     * 生成 perfect-freehand 选项。
+     * 整笔绘制应传 single（首尾圆帽）；几何 taper 仅看预设开关。
      * last 恒为 true，轮廓到达真实端点。
      * opts.simulatePressure / opts.streamline 可覆盖（稳定开启时 streamline 置 0）。
      */
     getStrokeOptions(strokeSizePx, strokePart, opts) {
       const part = strokePart || 'mid';
-      const taperStart = this.taperStart && (part === 'start' || part === 'single');
-      const taperEnd = this.taperEnd && (part === 'end' || part === 'single');
+      const taperStart = Boolean(this.taperStart);
+      const taperEnd = Boolean(this.taperEnd);
       const capStart = part === 'start' || part === 'single';
       const capEnd = part === 'end' || part === 'single';
       const simulatePressure = opts && opts.simulatePressure != null
