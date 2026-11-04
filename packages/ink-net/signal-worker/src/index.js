@@ -85,6 +85,26 @@ export class SignalRoom extends DurableObject {
     }
   }
 
+  /**
+   * Hibernation 唤醒后从 WebSocket attachment 重建 hostPeerId / roomId。
+   * 实例字段在休眠时会丢，attachment 与 getWebSockets() 仍在。
+   */
+  _ensureHostState() {
+    let hostPeerId = '';
+    let roomId = this.roomId || '';
+    for (const ws of this.ctx.getWebSockets()) {
+      if (!wsAlive(ws)) continue;
+      const meta = this._attachment(ws);
+      if (!meta || meta.role !== 'host' || !meta.peerId) continue;
+      hostPeerId = String(meta.peerId);
+      const attachedRoom = normalizeRoomId(meta.roomId);
+      if (attachedRoom) roomId = attachedRoom;
+      break;
+    }
+    this.hostPeerId = hostPeerId;
+    if (roomId) this.roomId = roomId;
+  }
+
   /** 按 peerId 找仍存活的 WebSocket。 */
   _findWs(peerId) {
     for (const ws of this.ctx.getWebSockets()) {
@@ -158,6 +178,7 @@ export class SignalRoom extends DurableObject {
 
   /** HTTP：接受 WebSocket 升级。 */
   async fetch(request) {
+    this._ensureHostState();
     const url = new URL(request.url);
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('SignalRoom expects WebSocket', { status: 426 });
@@ -180,6 +201,7 @@ export class SignalRoom extends DurableObject {
 
   /** Hibernation：处理信令消息。 */
   async webSocketMessage(ws, message) {
+    this._ensureHostState();
     const meta = this._attachment(ws) || {};
     const peerId = String(meta.peerId || '');
     if (!peerId) return;
@@ -261,6 +283,7 @@ export class SignalRoom extends DurableObject {
 
   /** Hibernation：连接关闭时清理房主。 */
   async webSocketClose(ws, code, reason, _wasClean) {
+    this._ensureHostState();
     const meta = this._attachment(ws) || {};
     const peerId = String(meta.peerId || '');
     this._detachPeer(peerId);
@@ -273,6 +296,7 @@ export class SignalRoom extends DurableObject {
 
   /** Hibernation：错误时同样清理。 */
   async webSocketError(ws, _error) {
+    this._ensureHostState();
     const meta = this._attachment(ws) || {};
     this._detachPeer(String(meta.peerId || ''));
   }

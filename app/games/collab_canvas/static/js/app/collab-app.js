@@ -644,6 +644,7 @@
     }
     const pathRoom = roomIdFromPath() || (boot.initialRoom || '').trim().toUpperCase();
     if (pathRoom && roomInput) roomInput.value = pathRoom;
+    // 公开站 Worker 强制 ?room=；无房间时不预连，进房由 joinRoom 再 connect。
     if (pathRoom) {
       pendingRestoreLocal = Boolean(restoreCheckbox && restoreCheckbox.checked);
       restoreAttempted = false;
@@ -651,6 +652,5 @@
       if (joinBtn) joinBtn.disabled = true;
       session.joinRoom(pathRoom);
     }
-    session.connect();
   });
 })(window);

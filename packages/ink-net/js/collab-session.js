@@ -125,6 +125,17 @@
           this._scheduleReconnect(savedRoom);
           return;
         }
+        // 房主信令断了无法继续权威房间：清会话并回大厅，避免卡在死 1/1。
+        if (wasInRoom && !this._intentionalLeave && this._role === 'host') {
+          this.lastError = '信令已断开，房间已关闭';
+          this._teardownMedia();
+          this._inRoom = false;
+          this.roomId = '';
+          this._role = '';
+          this._pendingJoin = null;
+          this._dispatch({ type: 'room_removed', message: this.lastError });
+          return;
+        }
         if (!this.roomId && this.lastError === 'WebSocket 连接失败') {
           this._pendingJoin = null;
           this._emit('close', event);

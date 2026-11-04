@@ -55,6 +55,7 @@
 - [x] 公开站：`scripts/export-pages.py`、Pages workflow、PWA「安装/快捷方式」、`packages/ink-net/signal-worker`；App 注入 `wsUrl`/`basePath`（`COLLAB_ASSET_VERSION=20261103i`）
 - [x] pages-review（20261103m）：Worker 死房主 `detachPeer`+`host_gone`；SW `config.json` 网络优先；PWA 在 config 后注册；静态站无 `wsUrl` 不连同源 WS
 - [x] 信令 DO（20261104a）：`SignalRoom` hibernation WS；消除多 Isolate `signal_no_host` 分裂房
+- [x] DO 房主恢复：唤醒时 `_ensureHostState()` 从 attachment 重建 `hostPeerId`（修静置后 join 仍 no_host）
 
 ## 关键路径
 

@@ -7,6 +7,7 @@
 - Worker 入口接受 `/inkmesh/ws` 与 `/ws`。
 - **必须**带查询参数 `?room=<ROOMID>`（2–8 位规范化房间号）。
 - 按 `idFromName(room)` 路由到 **一房间一** Durable Object `SignalRoom`，同房连接共享房主表（解决多 Isolate 内存不共享）。
+- **Hibernation**：DO 休眠会丢掉实例上的 `hostPeerId`，但 WebSocket attachment（`role: host|guest`）保留。每次 `fetch` / `webSocketMessage` / close / error 入口会 `_ensureHostState()` 从 attachment 重建房主，避免静置后再 join 误报 `signal_no_host`。
 - 客户端 [`collab-session.js`](../js/collab-session.js) 在进房时把 `room` 写进信令 URL；必要时会重连。
 
 ## 部署
