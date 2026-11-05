@@ -117,7 +117,7 @@ def write_png(path: Path, size: int, rgb: tuple[int, int, int] = (26, 26, 26)) -
 
 
 def main() -> None:
-    """Build dist/pages for GitHub Pages deployment."""
+    """Build dist/pages（再经 sync-worker-public.sh 打进 Cloudflare Worker Assets）。"""
     version = read_asset_version()
     if OUT.exists():
         shutil.rmtree(OUT)

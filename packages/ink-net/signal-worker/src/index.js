@@ -330,28 +330,60 @@ function forwardLobby(request, env, pathSuffix) {
   return stub.fetch(new Request(url.toString(), request));
 }
 
-/** HTTP / WebSocket 入口：健康检查 + 大厅 + 按 room 转发 DO。 */
+/** 是否房间深链路径（/inkmesh/ROOMID）。 */
+function isRoomDeepLink(path) {
+  const m = String(path || '').match(/^\/inkmesh\/([^/]+)$/i);
+  if (!m) return false;
+  const seg = String(m[1] || '').toUpperCase();
+  if (seg === 'WS' || seg === 'LOBBY' || seg === 'CONFIG.JSON') return false;
+  return roomIdOk(seg);
+}
+
+/** 从 ASSETS 取静态文件；深链回退到大厅 index。 */
+async function serveAssets(request, env, path) {
+  if (!env.ASSETS) {
+    return new Response('Static assets not bound', { status: 503 });
+  }
+  if (path === '/' || path === '') {
+    return Response.redirect(new URL('/inkmesh/', request.url).toString(), 302);
+  }
+  if (path === '/inkmesh' || isRoomDeepLink(path)) {
+    const indexUrl = new URL('/inkmesh/index.html', request.url);
+    return env.ASSETS.fetch(new Request(indexUrl.toString(), request));
+  }
+  const assetRes = await env.ASSETS.fetch(request);
+  if (assetRes.status !== 404) return assetRes;
+  if (path.startsWith('/inkmesh/')) {
+    const indexUrl = new URL('/inkmesh/index.html', request.url);
+    return env.ASSETS.fetch(new Request(indexUrl.toString(), request));
+  }
+  return assetRes;
+}
+
+/** HTTP / WebSocket 入口：静态站 + 健康检查 + 大厅 + 按 room 转发 DO。 */
 export default {
   /**
    * @param {Request} request
-   * @param {{ SIGNAL_ROOM: DurableObjectNamespace, PUBLIC_LOBBY: DurableObjectNamespace, LOBBY_HMAC?: string }} env
+   * @param {{ SIGNAL_ROOM: DurableObjectNamespace, PUBLIC_LOBBY: DurableObjectNamespace, ASSETS?: Fetcher, LOBBY_HMAC?: string }} env
    */
   async fetch(request, env) {
     const url = new URL(request.url);
-    const path = url.pathname.replace(/\/$/, '') || '/';
+    const pathRaw = url.pathname;
+    const path = pathRaw.replace(/\/$/, '') || '/';
     const method = request.method.toUpperCase();
 
     if (method === 'OPTIONS' && path.startsWith('/inkmesh/lobby')) {
       return new Response(null, { status: 204, headers: lobbyCorsHeaders(request) });
     }
 
-    if (path === '/' || path === '/health') {
+    if (path === '/health') {
       return new Response(
         JSON.stringify({
           ok: true,
           service: 'inkmesh-signal',
           backend: 'durable-object',
           lobby: true,
+          static: Boolean(env.ASSETS),
         }),
         { headers: { 'content-type': 'application/json; charset=utf-8' } },
       );
@@ -391,12 +423,6 @@ export default {
       return stub.fetch(request);
     }
 
-    return new Response(
-      'Inkmesh signal worker. WS /inkmesh/ws?room=ROOMID · Lobby GET /inkmesh/lobby',
-      {
-        status: 200,
-        headers: { 'content-type': 'text/plain; charset=utf-8' },
-      },
-    );
+    return serveAssets(request, env, path);
   },
 };

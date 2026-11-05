@@ -6,8 +6,8 @@
 
 ## 当前焦点
 
-- **任务**：公开大厅复查修复已落地（`20261105o`）
-- **下一步**：`wrangler deploy` 信令 Worker（含 PublicLobby 搜索/预览修复）后 Pages 生效；TURN 仍未做
+- **任务**：公开站迁 Cloudflare Worker Assets（与信令同源，`20261105q`）
+- **下一步**：配置 GitHub `CLOUDFLARE_*` Secrets；自定义域名（大陆）；TURN 仍未做
 - **活跃对话**：inkmesh - Main、inkmesh UI、画板P2P独立工作区、联机连接测试、pages-share
 
 ## 活跃泳道
@@ -38,7 +38,8 @@
 | d3 | 2026-11-02 | 矢量 segment 仍为权威；渲染改为拼路径整笔一次轮廓 + 笔画缓冲（opacity/flow）+ 惰性跟随 + 图层位图缓存。不移植 libmypaint。已落地于 `packages/ink-engine`；临时流程 MD 已删。 | `packages/ink-engine/js/board/core/stroke-path.js` |
 | d4 | 2026-11-02 | 同仓双包：`packages/ink-engine`（画笔）与 `packages/ink-net`（联机 JS + protocol.md）。App 只装配。服务端 WS 暂不拆包（待 P2P）。无 bundler，StaticFiles 挂 `/static/packages/*`。契约见各包 `CONTRACT.md`。 | `packages/*`、`docs/CODE_STRUCTURE.md` |
 | d5 | 2026-11-02 | 大厅用特色 UI（cask 战术终端提示词）。画板工作区维持高效直角 dock。他人光标和名字继续高效 UI：小圆点 + 10px 色标，不上切角和扫光。提示词在 `docs/ui/`，尚未改样式。 | `docs/ui/distinctive-ui.md`、`docs/ui/efficient-ui.md` |
-| d6 | 2026-11-03 | 长期分享：GitHub Pages 静态站 + Cloudflare Worker 信令（`packages/ink-net/signal-worker`）+ PWA/快捷方式。App 只注入 `wsUrl`/`basePath`；本机仍可用 FastAPI `/inkmesh/ws`。 | `deploy/pages/`、`scripts/export-pages.py` |
+| d6 | 2026-11-03 | 长期分享：先 GitHub Pages + CF Worker 信令；后改为 **同一 Worker 托管静态 Assets + 信令 + 大厅**（`signal-worker`）。App 只注入 `wsUrl`/`basePath`/`lobbyUrl`；本机仍 FastAPI。 | `signal-worker/`、`export-pages.py`、`deploy-cloudflare.yml` |
+| d9 | 2026-11-05 | 公开入口离开 github.io，默认 `*.workers.dev/inkmesh/`；大陆再绑自定义域名。 | `deploy-cloudflare.yml` |
 | d7 | 2026-11-04 | 公开站信令用 Durable Object（`SignalRoom`，`idFromName(room)`）；WS 须 `?room=`。客户端 collab-session 进房时带 room / 必要时重连。 | `packages/ink-net/signal-worker/`、`collab-session.js` |
 | d8 | 2026-11-05 | 私密房：房主开关 + 本机 `inviteToken`；校验在 P2P `join`（非 Worker）；链接 `?invite=`；token 不广播；重连免校验。 | `p2p-host-room.js`、`collab-session.js`、`collab-app.js`、`room-panel.js` |
 
