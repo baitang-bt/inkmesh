@@ -50,7 +50,6 @@
       this.session = settings.session || null;
       this.getNickname = settings.getNickname || (() => '玩家');
       this.displayNameInput = this.modal && this.modal.querySelector('#settingsOnlineDisplayName');
-      this.usePassportToggle = this.modal && this.modal.querySelector('#settingsOnlineUsePassportName');
       this.labelColorMount = this.modal && this.modal.querySelector('#settingsOnlineLabelColorMount');
       this.labelColorReset = this.modal && this.modal.querySelector('#settingsOnlineLabelReset');
       this.labelPreview = this.modal && this.modal.querySelector('#settingsOnlineLabelPreview');
@@ -62,6 +61,7 @@
       this.penTestPressure = this.modal && this.modal.querySelector('[data-pen-test-pressure]');
       this.penTestPad = this.penTestCanvas ? new PenTestPad(this.penTestCanvas, {
         penInput: this.penInput,
+        strokeSmoother: this.strokeSmoother,
         getBaseSize: () => this.getBrushSize(),
         getColor: () => this.getBrushColor(),
         pressureEl: this.penTestPressure
@@ -69,18 +69,9 @@
       this.debounceToggle = this.modal && this.modal.querySelector('#settingsDebounce');
       this.debounceLevel = this.modal && this.modal.querySelector('#settingsDebounceLevel');
       this.debounceLevelOut = this.modal && this.modal.querySelector('#settingsDebounceLevelOut');
-      this.debounceTestCanvas = this.modal && this.modal.querySelector('#debounceTestCanvas');
-      this.debounceTestPressure = this.modal && this.modal.querySelector('[data-debounce-test-pressure]');
-      this.debounceTestPad = this.debounceTestCanvas ? new PenTestPad(this.debounceTestCanvas, {
-        penInput: this.penInput,
-        strokeSmoother: this.strokeSmoother,
-        getBaseSize: () => this.getBrushSize(),
-        getColor: () => this.getBrushColor(),
-        pressureEl: this.debounceTestPressure
-      }) : null;
       if (this.strokeSmoother) {
         this.strokeSmoother.onBoostChange = () => {
-          if (this.debounceTestPad) this.debounceTestPad.refreshStatus();
+          if (this.penTestPad) this.penTestPad.refreshStatus();
         };
       }
 
@@ -135,7 +126,6 @@
       if (!this.modal) return;
       this.modal.classList.add('hidden');
       if (this.penTestPad) this.penTestPad.deactivate();
-      if (this.debounceTestPad) this.debounceTestPad.deactivate();
       if (this.shortcutManager) this.shortcutManager.cancelCapture();
       if (this.networkMonitor) this.networkMonitor.setActive(false);
     }
@@ -191,10 +181,6 @@
       if (this.penTestPad) {
         if (tabId === 'peripheral') this.penTestPad.activate();
         else this.penTestPad.deactivate();
-      }
-      if (this.debounceTestPad) {
-        if (tabId === 'peripheral') this.debounceTestPad.activate();
-        else this.debounceTestPad.deactivate();
       }
       if (tabId === 'shortcuts') this._renderShortcuts();
     }
@@ -253,12 +239,9 @@
      */
     syncOnlineFromPrefs() {
       if (!this.onlinePrefs) return;
-      const usePassport = this.onlinePrefs.getUsePassportName();
-      if (this.usePassportToggle) this.usePassportToggle.checked = usePassport;
       if (this.displayNameInput && document.activeElement !== this.displayNameInput) {
-        this.displayNameInput.value = this.onlinePrefs.getCustomDisplayName();
+        this.displayNameInput.value = this.onlinePrefs.resolveDisplayName(this.getNickname());
       }
-      if (this.displayNameInput) this.displayNameInput.disabled = usePassport;
       const stored = this.onlinePrefs.getLabelColor();
       if (this._labelColorSurface && stored && this._labelColorSurface.color !== stored) {
         this._labelColorSurface.setColor(stored);
@@ -301,20 +284,11 @@
         });
       }
       applyStored();
-      if (this.usePassportToggle) {
-        this.usePassportToggle.addEventListener('change', () => {
-          this.onlinePrefs.setUsePassportName(this.usePassportToggle.checked);
-          syncNameControls();
-          pushStyle();
-        });
-      }
       if (this.displayNameInput) {
         this.displayNameInput.addEventListener('input', () => {
           if (this.labelPreview) {
-            const usePassport = this.usePassportToggle && this.usePassportToggle.checked;
-            const previewName = usePassport
-              ? this.onlinePrefs.resolveDisplayName(this.getNickname())
-              : (this.displayNameInput.value.trim() || this.getNickname() || '玩家');
+            const previewName =
+              this.displayNameInput.value.trim() || this.getNickname() || '玩家';
             this.labelPreview.textContent = previewName;
           }
         });
@@ -382,14 +356,14 @@
         this.debounceToggle.addEventListener('change', () => {
           this.strokeSmoother.setEnabled(this.debounceToggle.checked);
           syncDebounce();
-          if (this.debounceTestPad) this.debounceTestPad.refreshStatus();
+          if (this.penTestPad) this.penTestPad.refreshStatus();
         });
       }
       if (this.debounceLevel) {
         this.debounceLevel.addEventListener('input', () => {
           this.strokeSmoother.setLevel(Number(this.debounceLevel.value));
           if (this.debounceLevelOut) this.debounceLevelOut.textContent = String(this.strokeSmoother.level);
-          if (this.debounceTestPad) this.debounceTestPad.refreshStatus();
+          if (this.penTestPad) this.penTestPad.refreshStatus();
         });
       }
       syncDebounce();

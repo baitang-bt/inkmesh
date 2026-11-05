@@ -68,6 +68,7 @@
       this.boardsMeta = [];
       this.boardOrder = [];
       this.ownerId = '';
+      this.maxPlayers = (global.RoomPanelLimits && RoomPanelLimits.DEFAULT) || 8;
       this.canDraw = true;
       this.canSave = true;
       this.isDrawing = false;
@@ -608,7 +609,9 @@
       const el = document.getElementById('memberCount');
       if (!el || !Array.isArray(players)) return;
       const online = players.filter(p => p.connected).length;
-      el.textContent = `${online}/${players.length}`;
+      const cap = Number(this.maxPlayers);
+      const denom = Number.isFinite(cap) && cap > 0 ? cap : players.length;
+      el.textContent = `${online}/${denom}`;
     }
   }
 

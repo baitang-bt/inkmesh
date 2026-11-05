@@ -18,7 +18,7 @@
 | `sendHistoryAction('undo'\|'redo'\|'clear')` | 历史操作 |
 | `requestRepairSync()` | 请求修复同步 |
 | `requestBoardSync(boardId)` | 请求整板同步 |
-| `sendRoomImport(document)` | 房主导入 .pbcc |
+| `sendRoomImport(document)` | 房主导入 .inkmesh / .pbcc |
 
 没有 adapter 时，本地绘制仍可工作，但不上网。
 

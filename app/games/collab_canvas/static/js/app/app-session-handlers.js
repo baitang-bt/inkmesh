@@ -64,7 +64,10 @@
           label_color: ctx.onlinePrefs.getWireLabelColor(),
           display_name: ctx.onlinePrefs.resolveDisplayName(ctx.nickname)
         });
-        if (ctx.roomPanel) ctx.roomPanel.setPlayers(data.players || []);
+        if (ctx.roomPanel) {
+          ctx.roomPanel.setPlayers(data.players || []);
+          if (data.max_players != null) ctx.roomPanel.setMaxPlayers(data.max_players);
+        }
         if (Array.isArray(data.players)) {
           data.players.forEach(player => {
             if (player.uid === data.self_id) return;
@@ -137,6 +140,14 @@
           });
         }
       },
+      room_max_players: data => {
+        if (ctx.boardController && ctx.boardController.handleRoomMaxPlayers) {
+          ctx.boardController.handleRoomMaxPlayers(data);
+        }
+        if (ctx.roomPanel && data.max_players != null) {
+          ctx.roomPanel.setMaxPlayers(data.max_players);
+        }
+      },
       player_join: data => {
         ctx.cursorOverlay.setPlayerStyle(data.player_id, data);
         if (ctx.boardController) {
@@ -170,19 +181,16 @@
       },
       player_leave: data => {
         if (!data.temporary) ctx.cursorOverlay.remove(data.player_id);
-        if (ctx.roomPanel) {
+        if (ctx.boardController) {
           const list = ctx.boardController.getPlayersSnapshot().slice();
-          if (data.temporary) {
-            const next = list.map(p => (
+          const next = data.temporary
+            ? list.map(p => (
               p.uid === data.player_id ? Object.assign({}, p, { connected: false }) : p
-            ));
-            ctx.boardController.setPlayersSnapshot(next);
-            ctx.roomPanel.setPlayers(next);
-          } else {
-            const next = list.filter(p => p.uid !== data.player_id);
-            ctx.boardController.setPlayersSnapshot(next);
-            ctx.roomPanel.setPlayers(next);
-          }
+            ))
+            : list.filter(p => p.uid !== data.player_id);
+          ctx.boardController.setPlayersSnapshot(next);
+          ctx.boardController._updateMemberCount(next);
+          if (ctx.roomPanel) ctx.roomPanel.setPlayers(next);
         }
         if (ctx.boardPanel) ctx.boardPanel.refreshOccupantTree();
         if (data.message) ctx.setStatus(data.message);

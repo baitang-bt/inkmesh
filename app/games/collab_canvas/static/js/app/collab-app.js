@@ -301,7 +301,7 @@
     navigator.clipboard.writeText(link).then(() => setStatus('链接已复制'));
   }
 
-  /** 房主退出：有房客则自动转移房主；无房客则提醒保存 .pbcc。 */
+  /** 房主退出：有房客则自动转移房主；无房客则提醒保存 .inkmesh。 */
   async function leaveRoom() {
     if (boardController) {
       boardController.stopPbccAutoSave();
@@ -310,7 +310,7 @@
     const guests = boardController.getPlayersSnapshot().filter(p => p.uid !== boardController.ownerId).length;
     if (isHost && guests === 0) {
       // 无房客：提醒保存，离开后画板将从服务端删除。
-      const wantSave = confirm('房间内没有其他成员，离开后画板会被删除。\n是否先导出 .pbcc 保存画板？');
+      const wantSave = confirm('房间内没有其他成员，离开后画板会被删除。\n是否先导出 .inkmesh 保存画板？');
       if (wantSave && boardController) {
         await boardController.exportAllBoards('pbcc');
       }
@@ -327,7 +327,7 @@
     showJoinScreen('');
   }
 
-  /** 房主进房后尝试从 .pbcc 文件或本机记忆恢复。 */
+  /** 房主进房后尝试从 .inkmesh/.pbcc 文件或本机记忆恢复。 */
   async function maybeRestorePbccAfterJoin(data) {
     if (restoreAttempted || !boardController) return;
     restoreAttempted = true;
@@ -459,7 +459,8 @@
     getSelfId: () => boardController.selfId,
     getOwnerId: () => boardController.ownerId,
     onKick: targetId => session.kickPlayer(targetId),
-    onSetPermissions: patch => session.sendHostPermissions(patch)
+    onSetPermissions: patch => session.sendHostPermissions(patch),
+    onSetMaxPlayers: maxPlayers => session.sendHostMaxPlayers(maxPlayers)
   });
 
   const roomPanelToggleBtn = document.getElementById('roomPanelToggleBtn');
@@ -534,7 +535,7 @@
     });
   }
 
-  /** 触发本机选择 .pbcc 文件。 */
+  /** 触发本机选择 .inkmesh / .pbcc 文件。 */
   function triggerPbccImport() {
     if (openPbccInput) openPbccInput.click();
   }
@@ -564,7 +565,7 @@
       } catch (err) {
         pendingPbccDocument = null;
         if (openPbccHint) openPbccHint.textContent = '';
-        setJoinError(err.message || '无法读取 .pbcc 文件');
+        setJoinError(err.message || '无法读取 .inkmesh / .pbcc 文件');
       }
     });
   }
@@ -618,7 +619,7 @@
   if (global.LobbyProfile) {
     lobbyProfile = new LobbyProfile({
       onlinePrefs,
-      passportNickname: nickname,
+      defaultNickname: nickname,
       playerId: selfId
     });
     lobbyProfile.bind();

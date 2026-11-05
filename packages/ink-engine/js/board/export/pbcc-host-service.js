@@ -171,7 +171,7 @@
           setStatus('正在准备导出…');
           const boards = await this.collectBoardsForExport();
           if (!boards.length) throw new Error('没有可导出的画板');
-          setStatus(isPbcc ? '正在导出 .pbcc…' : `正在导出 ${boards.length} 个文件…`);
+          setStatus(isPbcc ? '正在导出 .inkmesh…' : `正在导出 ${boards.length} 个文件…`);
           await this.exportRegistry.exportBoards(formatId, boards, {
             roomId: this._pbccRoomId() || 'room',
             delayMs: 150,
@@ -181,7 +181,7 @@
           if (isPbcc && this.isHost()) {
             await this.saveLocalPbccSnapshot();
           }
-          setStatus(isPbcc ? '已导出 .pbcc 文件' : `已导出 ${boards.length} 个文件`);
+          setStatus(isPbcc ? '已导出 .inkmesh 文件' : `已导出 ${boards.length} 个文件`);
         } catch (err) {
           setStatus(err.message || '导出失败');
         } finally {

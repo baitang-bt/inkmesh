@@ -82,14 +82,16 @@
 | `ping` | 无字段；服务端回复 `pong`，客户端用于 RTT 检测 |
 | `player_style` | `label_color?`、`display_name?` — 更新标签色与显示名（仅本游戏） |
 | `host_set_permissions` | 仅房主；`target_id?`（省略则全部房客）、`can_draw?`、`can_save?` |
+| `host_set_max_players` | 仅房主；`max_players`（2–30）；**减少上限不踢出已在房内的人**；满员后拒绝新人 |
 | `kick_player` | 仅房主；`target_id` |
-| `room_import` | 仅房主；`document` — 完整 `.pbcc` JSON 对象（见下文） |
+| `room_import` | 仅房主；`document` — 完整 `.inkmesh` / 旧版 `.pbcc` JSON 对象（见下文） |
 
 ## Server → Client
 
 | type | 说明 |
 |------|------|
-| `room_state` | 含 `layers[]`、`active_layer_id`；`players[]` 含 `can_draw`、`can_save`、`connected`、`is_host`、`active_board_id` |
+| `room_state` | 含 `layers[]`、`active_layer_id`、`max_players`；`players[]` 含 `can_draw`、`can_save`、`connected`、`is_host`、`active_board_id` |
+| `room_max_players` | `max_players` — 房主改人数上限后广播 |
 | `drawing_sync` | 含 `layers[]` + strokes |
 | `layer_added` / `layer_removed` / `layer_renamed` / `layer_reordered` / `layer_updated` | 图层变更 |
 | `layer_duplicated` | `board_id`, `source_layer_id`, `layer`, `strokes[]`, `created_by` — 图层副本含克隆 strokes |
@@ -111,6 +113,7 @@
 ## 房间面板（客户端 UI）
 
 - 按 **Tab** 开关「房间成员」面板：在线/暂离、本机 RTT、房主批量/单人权限与踢出。
+- 房主可见顶部「人数上限」（默认 8，范围 2–30）；顶栏成员数显示为 `在线/上限`。
 
 ## 客户端导出（纯浏览器）
 
@@ -118,15 +121,15 @@
 |------|------|
 | PNG / JPEG | 全图层合成图 |
 | KRA | 多 paintlayer 分层 |
-| **PBCC** | 全部画板 + 图层 + 矢量笔迹，单 JSON 文件（扩展名 `.pbcc`） |
+| **Inkmesh** | 全部画板 + 图层 + 矢量笔迹，单 JSON 文件（扩展名 `.inkmesh`；旧 `.pbcc` 仍可导入） |
 
-## `.pbcc` 文件格式（formatVersion 1）
+## `.inkmesh` 文件格式（formatVersion 1）
 
-纯 JSON，UTF-8；`Content-Type` 建议 `application/json`。
+纯 JSON，UTF-8；`Content-Type` 建议 `application/json`。旧版扩展名 `.pbcc` / `format: "pbcc"` **导入仍支持**。
 
 | 字段 | 说明 |
 |------|------|
-| `format` | 固定 `"pbcc"` |
+| `format` | 导出为 `"inkmesh"`；导入接受 `"inkmesh"` 或 `"pbcc"` |
 | `formatVersion` | 当前 **1** |
 | `protocolVersion` | 对应 WS 协议版本（当前 **2**） |
 | `exportedAt` | ISO 8601 时间 |
@@ -140,7 +143,7 @@
 ### `room_import` 规则（服务端）
 
 - **仅房主**可发送 `room_import`。
-- `document.format` 必须为 `pbcc`。
+- `document.format` 必须为 `inkmesh` 或 `pbcc`。
 - 若房间已有**用户笔迹**且**在线玩家 > 1**，拒绝覆盖（防误删协作内容）。
 - 成功后服务端 `broadcast_room_state`，全员收到完整房间快照。
 
@@ -150,9 +153,9 @@
 |------|------|
 | IndexedDB | 键 `userId:roomId`；房主每 90s 与离开房间时自动保存 |
 | localStorage | `collab-pbcc-restore-v1` — 加入页「恢复上次保存」开关 |
-| 加入页 | 「从 .pbcc 文件打开…」→ 进房后房主自动 `room_import` |
+| 加入页 | 「导入」→ 选 `.inkmesh` / `.pbcc` → 进房后房主自动 `room_import` |
 
-房间数据仅存于**服务端进程内存**；进程重启后须依赖 `.pbcc` 导出/恢复。
+房间数据仅存于**服务端进程内存**；进程重启后须依赖 `.inkmesh` 导出/恢复。
 
 ## Segment 工具类型
 
@@ -180,14 +183,13 @@
 | `collab-recent-colors-limit-v1` | 最近色缓存上限（2–24，默认 12）；轮盘按实际数量等分 |
 | `collab-tool-variants-v1` | 工具栏 flyout 组上次选用的变体 |
 | `collab-online-label-color-v1` | 联机用户名标签自定义底色 |
-| `collab-online-display-name-v1` | 合作画板专用自定义显示名 |
-| `collab-online-use-passport-name-v1` | `1` 使用通行证名 / `0` 使用自定义名 |
+| `collab-online-display-name-v1` | 联机显示名（本机记忆） |
 
 ## 联机显示名（客户端）
 
-- 通行证用户名来自登录身份；可在设置「联机」中填写**自定义名**（仅合作画板生效，localStorage 记忆）。
-- 「使用通行证用户名」开关开启时上送/展示通行证名；关闭时使用自定义名（为空则回退通行证名）。
-- 加入房间与 `player_style.display_name` 均会更新服务端 `players[].name`，并广播 `player_style`。
+- Inkmesh 无通行证；在设置「联机」或大厅资料里填写**昵称**（localStorage 记忆）。
+- 未填写时回退启动引导名 / `玩家`。
+- 加入房间与 `player_style.display_name` 均会更新 `players[].name`，并广播 `player_style`。
 
 ## 联机光标（cursor_update）
 

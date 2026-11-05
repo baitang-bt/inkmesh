@@ -80,8 +80,9 @@ async def handle(
         if not isinstance(document, dict):
             await send_error(websocket, "导入数据无效")
             return True
-        if str(document.get("format") or "") != "pbcc":
-            await send_error(websocket, "不是有效的 .pbcc 文档")
+        fmt = str(document.get("format") or "")
+        if fmt not in ("inkmesh", "pbcc"):
+            await send_error(websocket, "不是有效的 .inkmesh / .pbcc 文档")
             return True
         connected = sum(
             1 for pl in room["players"].values() if pl.get("connected")

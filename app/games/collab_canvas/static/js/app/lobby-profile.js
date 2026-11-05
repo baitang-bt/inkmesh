@@ -44,7 +44,7 @@
     constructor(options) {
       const settings = options || {};
       this.onlinePrefs = settings.onlinePrefs || null;
-      this.passportNickname = settings.passportNickname || '';
+      this.defaultNickname = settings.defaultNickname || settings.passportNickname || '';
       this.playerId = String(settings.playerId || 'self');
       this.avatarBtn = document.getElementById('lobbyProfileAvatar');
       this.initialEl = document.getElementById('lobbyProfileInitial');
@@ -87,30 +87,23 @@
     /** 按当前偏好重画昵称和色块；正在输入时不改输入框内容。 */
     refresh() {
       if (!this.onlinePrefs) return;
-      const name = this.onlinePrefs.resolveDisplayName(this.passportNickname);
+      const name = this.onlinePrefs.resolveDisplayName(this.defaultNickname);
       if (this.nameInput && document.activeElement !== this.nameInput) {
         this.nameInput.value = name;
       }
       this._paintAvatar(this.nameInput ? this.nameInput.value : name);
     }
 
-    /** 把输入写回偏好：空或与通行证相同则回到通行证名，否则用自定义名。 */
+    /** 把输入写回偏好；空则回退启动昵称。 */
     _commitName() {
       if (!this.onlinePrefs || !this.nameInput) return;
       const next = this.nameInput.value.trim().slice(0, 24);
-      const current = this.onlinePrefs.resolveDisplayName(this.passportNickname);
+      const current = this.onlinePrefs.resolveDisplayName(this.defaultNickname);
       if (next === current) {
         this.refresh();
         return;
       }
-      const passport = String(this.passportNickname || '').trim().slice(0, 24);
-      if (!next || next === passport) {
-        this.onlinePrefs.setCustomDisplayName('');
-        this.onlinePrefs.setUsePassportName(true);
-      } else {
-        this.onlinePrefs.setCustomDisplayName(next);
-        this.onlinePrefs.setUsePassportName(false);
-      }
+      this.onlinePrefs.setCustomDisplayName(next);
       this.refresh();
     }
 

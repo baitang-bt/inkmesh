@@ -51,7 +51,7 @@
             <button type="button" id="openPbccBtn" class="btn">导入</button>
             <button type="button" id="pwaInstallBtn" class="btn" title="安装应用或下载网址快捷方式">安装 / 快捷方式</button>
             <button type="button" id="lobbyNewBoardBtn" class="btn lobby-btn-primary">新建画板</button>
-            <input type="file" id="openPbccInput" class="join-pbcc-input" accept=".pbcc,application/json" hidden>
+            <input type="file" id="openPbccInput" class="join-pbcc-input" accept=".inkmesh,.pbcc,application/json" hidden>
           </div>
         </header>
         <div class="lobby-main-meta">
@@ -66,10 +66,10 @@
         <div id="lobbyBoardGrid" class="lobby-board-grid"></div>
         <div id="lobbyEmpty" class="lobby-empty hidden">
           <p class="lobby-empty-title">还没有画板</p>
-          <p class="lobby-empty-hint">新建一个房间开始画，或导入 .pbcc。进出过的房间会出现在这里。</p>
+          <p class="lobby-empty-hint">新建一个房间开始画，或导入 .inkmesh / .pbcc。进出过的房间会出现在这里。</p>
           <div class="lobby-empty-actions">
             <button type="button" id="lobbyEmptyNewBtn" class="btn lobby-btn-primary">新建画板</button>
-            <button type="button" id="lobbyEmptyImportBtn" class="btn">导入 .pbcc</button>
+            <button type="button" id="lobbyEmptyImportBtn" class="btn">导入文件</button>
           </div>
         </div>
       </section>
@@ -109,7 +109,7 @@
                 <p class="export-menu-hint">常用：每画板一个文件</p>
                 <button type="button" data-export="png">PNG</button>
                 <button type="button" data-export="jpeg">JPEG</button>
-                <button type="button" data-export="pbcc">合作画板 (.pbcc)</button>
+                <button type="button" data-export="pbcc">Inkmesh (.inkmesh)</button>
                 <div class="export-menu-special">
                   <button type="button" class="export-menu-special-toggle" id="exportSpecialToggle" aria-expanded="false">
                     <span class="export-menu-special-label">特殊格式</span>
@@ -336,17 +336,11 @@
               </label>
             </section>
             <section class="settings-subsection">
-              <h3 class="settings-subsection-head"><span>笔压测试</span></h3>
+              <h3 class="settings-subsection-head"><span>测试画板</span></h3>
+              <p class="settings-hint">同一画布可试笔压与防抖；笔迹仅本地预览，停笔后自动清空。</p>
               <div class="pen-test-wrap">
-                <canvas id="penTestCanvas" class="pen-test-canvas" width="480" height="200" aria-label="笔压测试画板"></canvas>
+                <canvas id="penTestCanvas" class="pen-test-canvas" width="480" height="200" aria-label="笔压与防抖测试画板"></canvas>
                 <p class="settings-hint pen-test-pressure" data-pen-test-pressure></p>
-              </div>
-            </section>
-            <section class="settings-subsection">
-              <h3 class="settings-subsection-head"><span>防抖测试</span></h3>
-              <div class="pen-test-wrap">
-                <canvas id="debounceTestCanvas" class="pen-test-canvas" width="480" height="200" aria-label="防抖测试画板"></canvas>
-                <p class="settings-hint pen-test-pressure" data-debounce-test-pressure></p>
               </div>
             </section>
           </div>
@@ -363,15 +357,11 @@
             <p class="settings-hint settings-pane-lead">以下设置仅在本合作画板内生效，并保存在本机浏览器。</p>
             <section class="settings-subsection">
               <h3 class="settings-subsection-head"><span>显示名称</span></h3>
-              <label class="settings-row settings-row-check">
-                <input id="settingsOnlineUsePassportName" type="checkbox" checked>
-                <span>使用通行证用户名</span>
-              </label>
               <label class="settings-row">
-                <span class="settings-row-label">自定义名</span>
-                <input id="settingsOnlineDisplayName" class="settings-text-input" type="text" maxlength="24" placeholder="合作画板专用昵称" autocomplete="off">
+                <span class="settings-row-label">昵称</span>
+                <input id="settingsOnlineDisplayName" class="settings-text-input" type="text" maxlength="24" placeholder="联机显示名" autocomplete="nickname">
               </label>
-              <p class="settings-hint">关闭「使用通行证用户名」后，将显示上方自定义名称。</p>
+              <p class="settings-hint">仅本机记忆，进房后对同房其他人可见。</p>
             </section>
             <section class="settings-subsection">
               <h3 class="settings-subsection-head"><span>光标标签</span></h3>
@@ -416,6 +406,13 @@
             <span class="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </header>
+        <div class="room-panel-options hidden" data-room-options>
+          <label class="room-panel-option-row">
+            <span class="room-panel-option-label">人数上限</span>
+            <select id="roomMaxPlayersSelect" data-room-max-players aria-label="房间人数上限"></select>
+          </label>
+          <p class="room-panel-option-hint">减少上限不会踢出已在房内的人；满员后拒绝新人加入。</p>
+        </div>
         <div class="room-panel-batch hidden" data-room-batch-bar>
           <span class="room-panel-batch-label">批量</span>
           <div class="room-panel-batch-actions">

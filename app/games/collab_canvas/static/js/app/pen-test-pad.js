@@ -4,7 +4,7 @@
   const CLEAR_DELAY_MS = 500;
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-  /** 设置内外设 Tab 本地笔压测试画板；笔迹不上传，停笔 0.5 秒后清空。 */
+  /** 设置内外设 Tab 共用测试画板（笔压 + 防抖）；笔迹不上传，停笔 0.5 秒后清空。 */
   class PenTestPad {
     constructor(canvas, options) {
       const settings = options || {};

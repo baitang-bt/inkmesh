@@ -6,7 +6,7 @@
   const STORE = 'snapshots';
   const PREF_KEY = 'collab-restore-last-v1';
 
-  /** IndexedDB：按用户+房间保存上次 .pbcc 文档。 */
+  /** IndexedDB：按用户+房间保存上次 .inkmesh 文档。 */
   const PbccLocalStore = {
     _dbPromise: null,
 
@@ -74,7 +74,7 @@
 
     /**
      * 列出某用户的本机快照摘要（大厅卡片用）。
-     * @param {string} userId 通行证 / 开发用户 id
+     * @param {string} userId 本机用户 id
      * @returns {Promise<Array<{roomId:string,title:string,savedAt:number}>>}
      */
     async listForUser(userId) {

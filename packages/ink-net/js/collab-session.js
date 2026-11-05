@@ -293,7 +293,7 @@
       };
     }
 
-    /** 向房主房间导入 .pbcc（房主本机处理）。 */
+    /** 向房主房间导入 .inkmesh / .pbcc（房主本机处理）。 */
     sendRoomImport(document) {
       return this.send({ type: 'room_import', document });
     }
@@ -608,7 +608,16 @@
       if (type === 'join') {
         const playerId = String(data.player_id || peerId);
         const result = this._hostRoom.acceptGuestJoin(playerId, data.name);
-        global.P2pTransport.sendOnLink(this._guestLinks.get(peerId), result.roomState);
+        const link = this._guestLinks.get(peerId);
+        if (result && result.rejected) {
+          global.P2pTransport.sendOnLink(link, {
+            type: 'room_removed',
+            message: result.message || '房间已满'
+          });
+          this._closeGuestLink(peerId);
+          return;
+        }
+        global.P2pTransport.sendOnLink(link, result.roomState);
         this._dispatch(result.playerJoin);
         this._broadcastToGuests(result.playerJoin, peerId);
         return;
@@ -871,6 +880,16 @@
         this._dispatch(msg);
         this._broadcastToGuests(msg);
       });
+      return true;
+    }
+
+    /** 房主：设置房间人数上限（减员不踢出已在房内的人）。 */
+    sendHostMaxPlayers(maxPlayers) {
+      if (this._role !== 'host' || !this._hostRoom) return false;
+      const msg = this._hostRoom.setMaxPlayers(this.selfId, maxPlayers);
+      if (!msg) return false;
+      this._dispatch(msg);
+      this._broadcastToGuests(msg);
       return true;
     }
 

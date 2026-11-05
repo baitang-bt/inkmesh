@@ -2,9 +2,19 @@
   'use strict';
 
   const PROTOCOL_VERSION = 2;
+  const MAX_PLAYERS_MIN = 2;
+  const MAX_PLAYERS_MAX = 30;
+  const MAX_PLAYERS_DEFAULT = 8;
+
+  /** 将人数上限夹到合法范围。 */
+  function clampMaxPlayers(raw) {
+    const n = Math.floor(Number(raw));
+    if (!Number.isFinite(n)) return MAX_PLAYERS_DEFAULT;
+    return Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, n));
+  }
 
   /** 默认画板元数据与空白笔迹（新房主进房用）。 */
-  function defaultEmptySnapshot(roomId, selfId, displayName) {
+  function defaultEmptySnapshot(roomId, selfId, displayName, maxPlayers) {
     const canvas = { mode: 'vector', width: 1920, height: 1080 };
     const layers = [
       {
@@ -54,6 +64,7 @@
       room_id: roomId,
       self_id: selfId,
       owner_id: selfId,
+      max_players: clampMaxPlayers(maxPlayers),
       players: [
         {
           uid: selfId,
@@ -95,12 +106,14 @@
       this.getDisplayName = settings.getDisplayName || (() => '玩家');
       this.getRoomSnapshot = settings.getRoomSnapshot || null;
       this.players = new Map();
+      this.maxPlayers = clampMaxPlayers(settings.maxPlayers || MAX_PLAYERS_DEFAULT);
     }
 
     /** 房主开房时写入自己。 */
     bootstrapHost(roomId) {
       const name = this.getDisplayName();
       this.players.clear();
+      this.maxPlayers = clampMaxPlayers(this.maxPlayers || MAX_PLAYERS_DEFAULT);
       this.players.set(this.selfId, {
         uid: this.selfId,
         name,
@@ -111,7 +124,7 @@
         can_draw: true,
         can_save: true
       });
-      return defaultEmptySnapshot(roomId, this.selfId, name);
+      return defaultEmptySnapshot(roomId, this.selfId, name, this.maxPlayers);
     }
 
     /** 当前成员列表（数组）。 */
@@ -121,6 +134,11 @@
 
     /** 处理房客 join，返回发给该房客的 room_state 与广播用的 player_join。 */
     acceptGuestJoin(playerId, displayName) {
+      if (this.players.has(playerId)) {
+        /* 重连同一人：不占新名额 */
+      } else if (this.players.size >= this.maxPlayers) {
+        return { rejected: true, reason: 'room_full', message: '房间已满' };
+      }
       const name = String(displayName || '').trim().slice(0, 24) || '玩家';
       const row = {
         uid: playerId,
@@ -141,7 +159,8 @@
         state = defaultEmptySnapshot(
           (state && state.room_id) || '',
           playerId,
-          name
+          name,
+          this.maxPlayers
         );
         state.self_id = playerId;
         state.owner_id = this.selfId;
@@ -151,6 +170,7 @@
           type: 'room_state',
           self_id: playerId,
           owner_id: this.selfId,
+          max_players: this.maxPlayers,
           players: this.listPlayers()
         });
       }
@@ -164,6 +184,16 @@
         is_host: false
       };
       return { roomState: state, playerJoin: joinMsg };
+    }
+
+    /**
+     * 房主设置人数上限；减少时不踢已在房内的人。
+     * @returns {{ type: string, max_players: number }|null}
+     */
+    setMaxPlayers(fromId, rawMax) {
+      if (fromId !== this.selfId) return null;
+      this.maxPlayers = clampMaxPlayers(rawMax);
+      return { type: 'room_max_players', max_players: this.maxPlayers };
     }
 
     /** 更新成员显示名或标签色。 */
@@ -231,5 +261,12 @@
   }
 
   global.P2pHostRoom = P2pHostRoom;
-  global.P2pHostRoomDefaults = { defaultEmptySnapshot, PROTOCOL_VERSION };
+  global.P2pHostRoomDefaults = {
+    defaultEmptySnapshot,
+    PROTOCOL_VERSION,
+    MAX_PLAYERS_MIN,
+    MAX_PLAYERS_MAX,
+    MAX_PLAYERS_DEFAULT,
+    clampMaxPlayers
+  };
 })(window);

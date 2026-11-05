@@ -1,7 +1,9 @@
 (function (global) {
   'use strict';
 
+  const INKMESH_FORMAT = 'inkmesh';
   const PBCC_FORMAT = 'pbcc';
+  const ACCEPTED_FORMATS = { inkmesh: 1, pbcc: 1 };
   const PBCC_FORMAT_VERSION = 1;
   const PBCC_PROTOCOL_VERSION = 2;
 
@@ -34,7 +36,7 @@
     };
   }
 
-  /** 从画板快照构建 .pbcc 文档对象。 */
+  /** 从画板快照构建 .inkmesh 文档对象（format 字段为 inkmesh）。 */
   function buildDocument(options) {
     const opts = options || {};
     const boardsIn = opts.boards || [];
@@ -60,7 +62,7 @@
       });
     });
     return {
-      format: PBCC_FORMAT,
+      format: INKMESH_FORMAT,
       formatVersion: PBCC_FORMAT_VERSION,
       protocolVersion: PBCC_PROTOCOL_VERSION,
       exportedAt: new Date().toISOString(),
@@ -74,25 +76,26 @@
     };
   }
 
-  /** 解析 .pbcc JSON 文本/对象并做基础校验。 */
+  /** 解析 .inkmesh / 旧版 .pbcc JSON 文本/对象并做基础校验。 */
   function parseDocument(raw) {
     let data = raw;
     if (typeof raw === 'string') {
       data = JSON.parse(raw);
     }
-    if (!data || data.format !== PBCC_FORMAT) {
-      throw new Error('不是有效的 .pbcc 文件');
+    const formatId = data && String(data.format || '');
+    if (!data || !ACCEPTED_FORMATS[formatId]) {
+      throw new Error('不是有效的 .inkmesh / .pbcc 文件');
     }
     if (Number(data.formatVersion) !== PBCC_FORMAT_VERSION) {
-      throw new Error('不支持的 .pbcc 版本');
+      throw new Error('不支持的文件版本');
     }
     const boards = Array.isArray(data.boards) ? data.boards : [];
-    if (!boards.length) throw new Error('.pbcc 文件不含画板');
+    if (!boards.length) throw new Error('文件不含画板');
     const boardOrder = Array.isArray(data.board_order) && data.board_order.length
       ? data.board_order.map(String)
       : boards.map(b => String(b.board_id));
     return {
-      format: PBCC_FORMAT,
+      format: formatId,
       formatVersion: PBCC_FORMAT_VERSION,
       protocolVersion: Number(data.protocolVersion) || PBCC_PROTOCOL_VERSION,
       exportedAt: data.exportedAt || '',
@@ -117,7 +120,7 @@
     return new Blob([json], { type: 'application/vnd.potatoblock.collab-canvas+json' });
   }
 
-  /** 从 File 读取并解析 .pbcc。 */
+  /** 从 File 读取并解析 .inkmesh 或旧版 .pbcc。 */
   function readFile(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -134,8 +137,10 @@
   }
 
   global.PbccFormat = {
+    INKMESH_FORMAT,
     PBCC_FORMAT,
     PBCC_FORMAT_VERSION,
+    ACCEPTED_FORMATS,
     buildDocument,
     parseDocument,
     encodeBlob,

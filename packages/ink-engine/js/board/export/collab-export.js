@@ -222,9 +222,9 @@
     },
     pbcc: {
       id: 'pbcc',
-      label: '合作画板 (.pbcc)',
-      extension: 'pbcc',
-      mime: 'application/vnd.potatoblock.collab-canvas+json',
+      label: 'Inkmesh (.inkmesh)',
+      extension: 'inkmesh',
+      mime: 'application/vnd.inkmesh.canvas+json',
       multiBoardSingleFile: true,
       async encode(_rgba, _width, _height, meta) {
         if (!global.PbccFormat) throw new Error('PBCC 模块未加载');
@@ -317,7 +317,7 @@
       }
     }
 
-    /** 构建 .pbcc 文档对象（不下载）。 */
+    /** 构建 .inkmesh 文档对象（不下载）。 */
     buildPbccDocument(boards, options) {
       if (!global.PbccFormat) throw new Error('PBCC 模块未加载');
       const opts = options || {};

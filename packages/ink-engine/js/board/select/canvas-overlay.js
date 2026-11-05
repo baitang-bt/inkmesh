@@ -72,6 +72,7 @@
       return { x: x * w, y: y * h };
     }
 
+    /** 形状/直线预览：一律无填充实线描边（实心工具落笔前也只画轮廓）。 */
     _drawPreview(ctx, w, h, spec) {
       const p1 = this._norm(ctx, spec.x1, spec.y1, w, h);
       const p2 = this._norm(ctx, spec.x2, spec.y2, w, h);
@@ -79,9 +80,10 @@
       const lineWidth = Math.max(1, (Number(spec.size) || 5) * (w / 640));
       ctx.save();
       ctx.strokeStyle = color;
-      ctx.fillStyle = color;
       ctx.lineWidth = lineWidth;
-      ctx.setLineDash([4, 4]);
+      ctx.setLineDash([]);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       ctx.globalAlpha = 0.85;
       if (spec.kind === 'line') {
         ctx.beginPath();
@@ -93,8 +95,7 @@
         const top = Math.min(p1.y, p2.y);
         const rw = Math.abs(p2.x - p1.x);
         const rh = Math.abs(p2.y - p1.y);
-        if (spec.filled) ctx.fillRect(left, top, rw, rh);
-        else ctx.strokeRect(left, top, rw, rh);
+        ctx.strokeRect(left, top, rw, rh);
       } else if (spec.kind === 'ellipse') {
         const cx = (p1.x + p2.x) / 2;
         const cy = (p1.y + p2.y) / 2;
@@ -102,10 +103,8 @@
         const ry = Math.abs(p2.y - p1.y) / 2;
         ctx.beginPath();
         ctx.ellipse(cx, cy, Math.max(rx, 0.5), Math.max(ry, 0.5), 0, 0, Math.PI * 2);
-        if (spec.filled) ctx.fill();
-        else ctx.stroke();
+        ctx.stroke();
       } else if (spec.kind === 'gradient') {
-        ctx.setLineDash([]);
         ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(p2.x, p2.y);

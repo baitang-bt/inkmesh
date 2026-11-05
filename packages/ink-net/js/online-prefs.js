@@ -3,7 +3,6 @@
 
   const STORAGE_KEY = 'collab-online-label-color-v1';
   const DISPLAY_NAME_KEY = 'collab-online-display-name-v1';
-  const USE_PASSPORT_KEY = 'collab-online-use-passport-name-v1';
   const HEX_RE = /^#[0-9a-f]{6}$/i;
   const MAX_DISPLAY_NAME_LEN = 24;
 
@@ -38,17 +37,11 @@
     constructor() {
       this._labelColor = '';
       this._customDisplayName = '';
-      this._usePassportName = true;
       this._load();
     }
 
     getCustomDisplayName() {
       return this._customDisplayName;
-    }
-
-    /** 是否优先显示通行证用户名（否则用自定义名）。 */
-    getUsePassportName() {
-      return this._usePassportName;
     }
 
     setCustomDisplayName(name) {
@@ -59,21 +52,13 @@
       this._notify();
     }
 
-    setUsePassportName(usePassport) {
-      const next = Boolean(usePassport);
-      if (next === this._usePassportName) return;
-      this._usePassportName = next;
-      this._saveUsePassport();
-      this._notify();
-    }
-
-    /** 解析当前应上送/展示的用户名。 */
-    resolveDisplayName(passportNickname) {
-      const passport = String(passportNickname || '').trim().slice(0, MAX_DISPLAY_NAME_LEN);
-      if (this._usePassportName) {
-        return passport || this._customDisplayName || '玩家';
-      }
-      return this._customDisplayName || passport || '玩家';
+    /**
+     * 解析当前应上送/展示的用户名。
+     * @param {string} [fallbackName] 未设自定义名时的回退（如启动引导昵称）
+     */
+    resolveDisplayName(fallbackName) {
+      const fallback = String(fallbackName || '').trim().slice(0, MAX_DISPLAY_NAME_LEN);
+      return this._customDisplayName || fallback || '玩家';
     }
 
     getLabelColor() {
@@ -115,11 +100,6 @@
         const nameRaw = localStorage.getItem(DISPLAY_NAME_KEY);
         if (nameRaw) this._customDisplayName = String(nameRaw).trim().slice(0, MAX_DISPLAY_NAME_LEN);
       } catch (_err) {}
-      try {
-        const flag = localStorage.getItem(USE_PASSPORT_KEY);
-        if (flag === '0') this._usePassportName = false;
-        else if (flag === '1') this._usePassportName = true;
-      } catch (_err) {}
     }
 
     _saveLabelColor() {
@@ -133,12 +113,6 @@
       try {
         if (this._customDisplayName) localStorage.setItem(DISPLAY_NAME_KEY, this._customDisplayName);
         else localStorage.removeItem(DISPLAY_NAME_KEY);
-      } catch (_err) {}
-    }
-
-    _saveUsePassport() {
-      try {
-        localStorage.setItem(USE_PASSPORT_KEY, this._usePassportName ? '1' : '0');
       } catch (_err) {}
     }
   }

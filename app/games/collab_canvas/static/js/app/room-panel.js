@@ -1,6 +1,10 @@
 (function (global) {
   'use strict';
 
+  const MAX_PLAYERS_MIN = 2;
+  const MAX_PLAYERS_MAX = 30;
+  const MAX_PLAYERS_DEFAULT = 8;
+
   /** Tab 键打开的房间成员面板：在线状态、延迟、房主按人权限控制。 */
   class RoomPanel {
     constructor(options) {
@@ -11,12 +15,16 @@
       this.closeBtn = this.modal && this.modal.querySelector('[data-room-panel-close]');
       this.selfRttEl = this.modal && this.modal.querySelector('[data-room-self-rtt]');
       this.batchBar = this.modal && this.modal.querySelector('[data-room-batch-bar]');
+      this.optionsBar = this.modal && this.modal.querySelector('[data-room-options]');
+      this.maxPlayersSelect = this.modal && this.modal.querySelector('[data-room-max-players]');
       this.session = settings.session || null;
       this.getSelfId = settings.getSelfId || (() => '');
       this.getOwnerId = settings.getOwnerId || (() => '');
       this.players = [];
+      this.maxPlayers = MAX_PLAYERS_DEFAULT;
       this._onKick = settings.onKick || (() => {});
       this._onSetPermissions = settings.onSetPermissions || (() => {});
+      this._onSetMaxPlayers = settings.onSetMaxPlayers || (() => {});
 
       if (this.backdrop) {
         this.backdrop.addEventListener('click', event => {
@@ -33,7 +41,33 @@
         }
       }, true);
 
+      this._fillMaxPlayersSelect();
       this._bindBatchActions();
+      this._bindMaxPlayers();
+    }
+
+    /** 填充人数上限下拉（2–30）。 */
+    _fillMaxPlayersSelect() {
+      if (!this.maxPlayersSelect) return;
+      this.maxPlayersSelect.innerHTML = '';
+      for (let n = MAX_PLAYERS_MIN; n <= MAX_PLAYERS_MAX; n += 1) {
+        const opt = document.createElement('option');
+        opt.value = String(n);
+        opt.textContent = String(n) + ' 人';
+        this.maxPlayersSelect.appendChild(opt);
+      }
+      this.maxPlayersSelect.value = String(this.maxPlayers);
+    }
+
+    /** 房主改人数上限；减员不踢人。 */
+    _bindMaxPlayers() {
+      if (!this.maxPlayersSelect) return;
+      this.maxPlayersSelect.addEventListener('change', () => {
+        const next = Number(this.maxPlayersSelect.value);
+        if (!Number.isFinite(next)) return;
+        this.maxPlayers = Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, Math.floor(next)));
+        this._onSetMaxPlayers(this.maxPlayers);
+      });
     }
 
     /** 房主批量开关：作用于全部房客。 */
@@ -78,6 +112,17 @@
       if (this.isOpen()) this.refresh();
     }
 
+    /** 同步房间人数上限到面板控件。 */
+    setMaxPlayers(maxPlayers) {
+      const n = Number(maxPlayers);
+      if (!Number.isFinite(n)) return;
+      this.maxPlayers = Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, Math.floor(n)));
+      if (this.maxPlayersSelect && String(this.maxPlayersSelect.value) !== String(this.maxPlayers)) {
+        this.maxPlayersSelect.value = String(this.maxPlayers);
+      }
+      if (this.isOpen()) this.refresh();
+    }
+
     updatePlayerPermissions(playerId, patch) {
       this.players = this.players.map(p => {
         if (p.uid !== playerId) return p;
@@ -86,12 +131,21 @@
       if (this.isOpen()) this.refresh();
     }
 
-    /** 重绘成员列表与房主批量栏。 */
+    /** 重绘成员列表、顶部选项与房主批量栏。 */
     refresh() {
       const selfId = this.getSelfId();
       const ownerId = this.getOwnerId();
       const isHost = selfId && ownerId && selfId === ownerId;
       const guestCount = this.players.filter(p => p.uid !== ownerId).length;
+      if (this.optionsBar) {
+        this.optionsBar.classList.toggle('hidden', !isHost);
+      }
+      if (this.maxPlayersSelect) {
+        this.maxPlayersSelect.disabled = !isHost;
+        if (String(this.maxPlayersSelect.value) !== String(this.maxPlayers)) {
+          this.maxPlayersSelect.value = String(this.maxPlayers);
+        }
+      }
       if (this.batchBar) {
         this.batchBar.classList.toggle('hidden', !isHost || guestCount === 0);
       }
@@ -219,4 +273,9 @@
   }
 
   global.RoomPanel = RoomPanel;
+  global.RoomPanelLimits = {
+    MIN: MAX_PLAYERS_MIN,
+    MAX: MAX_PLAYERS_MAX,
+    DEFAULT: MAX_PLAYERS_DEFAULT
+  };
 })(window);

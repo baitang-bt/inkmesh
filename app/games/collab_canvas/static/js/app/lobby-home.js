@@ -4,7 +4,7 @@
   const ROOM_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const ROOM_FIRST = ROOM_ALPHABET.replace('P', '');
 
-  /** 从 .pbcc 文档取第一块画板标题。 */
+  /** 从 .inkmesh / .pbcc 文档取第一块画板标题。 */
   function titleFromDocument(document) {
     if (!document || !Array.isArray(document.boards) || !document.boards.length) return '';
     const first = document.boards[0];

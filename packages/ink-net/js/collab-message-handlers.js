@@ -35,10 +35,23 @@
         }
       }
       this._syncBoardPanel();
+      if (data.max_players != null) {
+        this.maxPlayers = Number(data.max_players) || this.maxPlayers || 8;
+      }
       this.onRoomChange(data);
       this._updateMemberCount(data.players);
       this.setPlayersSnapshot(data.players);
     };
+
+      /** 应用房主下发的人数上限，并刷新顶栏在线/上限。 */
+      proto.handleRoomMaxPlayers = function(data) {
+        const n = Math.floor(Number(data && data.max_players));
+        if (!Number.isFinite(n)) return;
+        const min = (global.RoomPanelLimits && RoomPanelLimits.MIN) || 2;
+        const max = (global.RoomPanelLimits && RoomPanelLimits.MAX) || 30;
+        this.maxPlayers = Math.max(min, Math.min(max, n));
+        this._updateMemberCount(this.getPlayersSnapshot());
+      };
 
       proto._applySelfPermissions = function(players, selfId) {
       const id = selfId || this.selfId;
@@ -158,12 +171,16 @@
           height: 1080
         };
         const players = this.getPlayersSnapshot().slice();
+        const hostMax = this.session && this.session._hostRoom
+          ? this.session._hostRoom.maxPlayers
+          : this.maxPlayers;
         return {
           type: 'room_state',
           protocolVersion: 2,
           room_id: (this.session && this.session.roomId) || '',
           self_id: forPlayerId,
           owner_id: this.ownerId || this.selfId,
+          max_players: hostMax || this.maxPlayers || 8,
           players,
           boards: this.boardsMeta.length
             ? this.boardsMeta

@@ -2,13 +2,13 @@
 
 > 多 Agent / 多对话共享的项目记忆。Hub `conversations/{标题}.md` 只存指针与本场状态；**可复用的决策与进展写在此文件**。
 >
-> 最后更新：2026-11-04 21:50 +0800
+> 最后更新：2026-11-05 18:50 +0800
 
 ## 当前焦点
 
-- **任务**：信令 Worker 已迁 Durable Object（一房一 DO）；公开站联机跨 Isolate 修复
-- **下一步**：Pages 随 collab-session 推送；TURN / 公开房间发现仍未做
-- **活跃对话**：inkmesh UI、画板P2P独立工作区、联机连接测试、pages-share
+- **任务**：联机体验收口；人数上限 / `.inkmesh` 已落地；离房顶栏人数已修
+- **下一步**：推送 Pages（`20261105f`）；TURN / 公开房间发现仍未做
+- **活跃对话**：inkmesh - Main、inkmesh UI、画板P2P独立工作区、联机连接测试、pages-share
 
 ## 活跃泳道
 
@@ -24,7 +24,8 @@
 | 联机连接测试 | net | `packages/ink-net/**`（不含 `signal-worker/`）、`app/games/collab_canvas/ws_handlers/**`、`room_store.py` | active | 2026-11-02 |
 | inkmesh P2P修复 | net-fix | `packages/ink-net/js/{p2p-transport,collab-session}.js`、`routes.py` 资源版本（用户指定修 1–4；不含公开发现） | done | 2026-11-02 |
 | pages-share | pages-share | `packages/ink-net/signal-worker/**`、`scripts/export-pages.py`、`deploy/pages/**`、`.github/workflows/pages.yml`、PWA（manifest/sw）、`static/js/app/{collab-app,pwa-install}.js`、`templates/index.html` 的 PWA/config 装配、`README.md` 公开访问 | active | 2026-11-03 |
-| 检查下新内容的代码并修复 | pages-review | 复查并修 pages-share：`signal-worker`、`export-pages.py`、`collab-app.js`、`routes.py` 资源版本 | done | 2026-11-04 |
+| 检查下新内容的代码并修复 | pages-review | 复查并修 pages-share：`signal-worker`、`export-pages.py`、`collab-app.js`、`routes.py` 资源版本；离房 `_updateMemberCount` | active | 2026-11-05 |
+| inkmesh - Main | room-cap | 房间人数上限：`room-panel`/`index.html` options、`p2p-host-room`/`collab-session`/`collab-message-handlers`、`app-session-handlers`、`protocol.md`、`routes.py` 版本 | active | 2026-11-05 |
 
 状态：`active`（进行中）/ `done`（本泳道收工）。子对话开场时把模板行改成真实对话名并设 `active`。
 
@@ -56,6 +57,12 @@
 - [x] pages-review（20261103m）：Worker 死房主 `detachPeer`+`host_gone`；SW `config.json` 网络优先；PWA 在 config 后注册；静态站无 `wsUrl` 不连同源 WS
 - [x] 信令 DO（20261104a）：`SignalRoom` hibernation WS；消除多 Isolate `signal_no_host` 分裂房
 - [x] DO 房主恢复：唤醒时 `_ensureHostState()` 从 attachment 重建 `hostPeerId`（修静置后 join 仍 no_host）
+- [x] 房主人数上限（20261105a）：房间成员面板顶部「人数上限」2–30（默认 8）；减员不踢；满员拒新人；顶栏 `在线/上限`；协议 `host_set_max_players` / `room_max_players`
+- [x] 导出扩展名改为 `.inkmesh`（`format: "inkmesh"`）；导入仍接受 `.pbcc` / `format: "pbcc"`（`COLLAB_ASSET_VERSION=20261105b`）
+- [x] 外设「笔压 / 防抖」共用一张测试画板（`20261105c`）
+- [x] 联机设置去掉通行证开关；仅昵称（`20261105d`）
+- [x] 形状工具预览：实心/空心统一无填充实线描边（`20261105e`）
+- [x] `player_leave` 刷新顶栏 `在线/上限`；`handleRoomMaxPlayers` 夹紧上限（`20261105f`）
 
 ## 关键路径
 

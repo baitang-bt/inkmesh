@@ -477,7 +477,7 @@ def room_has_user_strokes(room: Dict) -> bool:
 
 
 def _board_from_pbcc_entry(entry: Dict, player_id: str) -> Dict:
-    """从 .pbcc 画板条目构建服务端 board 对象。"""
+    """从 .inkmesh / .pbcc 画板条目构建服务端 board 对象。"""
     board_id = str(entry.get("board_id") or ("b_" + uuid.uuid4().hex[:10]))
     title = str(entry.get("title") or "画板")[:40]
     canvas = normalize_canvas_mode(entry.get("canvas") or default_vector_canvas())
@@ -541,7 +541,7 @@ def _board_from_pbcc_entry(entry: Dict, player_id: str) -> Dict:
 
 
 def import_pbcc_document(room: Dict, document: Dict, player_id: str) -> None:
-    """用 .pbcc 文档替换房间全部画板。"""
+    """用 .inkmesh / .pbcc 文档替换房间全部画板。"""
     boards_in = document.get("boards") or []
     order_in = document.get("board_order") or []
     if not boards_in:
