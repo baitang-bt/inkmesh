@@ -183,6 +183,7 @@ const SHELL = [
   '{BASE_PATH}/static/css/site.css?v={version}'
 ];
 const CONFIG_PATH = '{BASE_PATH}/config.json';
+const HTML_PATHS = new Set(['{BASE_PATH}/', '{BASE_PATH}/index.html']);
 
 self.addEventListener('install', event => {{
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -202,10 +203,17 @@ self.addEventListener('fetch', event => {{
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (!url.pathname.startsWith('{BASE_PATH}')) return;
-  // config.json 必须网络优先，否则改 wsUrl 不 bump 资源版本时会一直用旧信令地址。
-  if (url.pathname === CONFIG_PATH) {{
+  // config / HTML 导航网络优先，避免壳页长期卡在旧「我的画板」布局。
+  const isHtmlNav = req.mode === 'navigate' || HTML_PATHS.has(url.pathname);
+  if (url.pathname === CONFIG_PATH || isHtmlNav) {{
     event.respondWith(
-      fetch(req).catch(() => caches.match(req))
+      fetch(req).then(res => {{
+        if (res && res.ok) {{
+          const copy = res.clone();
+          caches.open(CACHE).then(cache => cache.put(req, copy));
+        }}
+        return res;
+      }}).catch(() => caches.match(req))
     );
     return;
   }}
