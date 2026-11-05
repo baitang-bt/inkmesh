@@ -27,6 +27,7 @@
       this.roomId = '';
       this.connected = false;
       this._pendingJoin = null;
+      this._pendingInvite = '';
       this._cursorTimer = 0;
       this._lastCursorSent = 0;
       this._pendingCursor = null;
@@ -47,6 +48,39 @@
       this._hostLink = null;
       this._hostPeerId = '';
       this._guestPeerIdByLink = new WeakMap();
+      /** 信令 peerId → 业务 playerId（join.player_id / boot.userId） */
+      this._playerIdByPeer = new Map();
+      /** 业务 playerId → 信令 peerId（踢人关通道用） */
+      this._peerIdByPlayer = new Map();
+      /** 房客侧已同步的私密状态（不含口令） */
+      this._privateRoom = false;
+    }
+
+    /** 将信令 peer 解析为成员表用的 playerId。 */
+    _playerIdForPeer(peerId) {
+      const pid = String(peerId || '');
+      return this._playerIdByPeer.get(pid) || pid;
+    }
+
+    /** 登记 peer ↔ player 映射（join 成功后）。 */
+    _bindGuestIdentity(peerId, playerId) {
+      const peer = String(peerId || '');
+      const player = String(playerId || peer);
+      if (!peer) return;
+      const prevPlayer = this._playerIdByPeer.get(peer);
+      if (prevPlayer && prevPlayer !== player) this._peerIdByPlayer.delete(prevPlayer);
+      const prevPeer = this._peerIdByPlayer.get(player);
+      if (prevPeer && prevPeer !== peer) this._playerIdByPeer.delete(prevPeer);
+      this._playerIdByPeer.set(peer, player);
+      this._peerIdByPlayer.set(player, peer);
+    }
+
+    /** 清除某条 peer/player 映射。 */
+    _unbindGuestIdentity(peerId) {
+      const peer = String(peerId || '');
+      const player = this._playerIdByPeer.get(peer);
+      this._playerIdByPeer.delete(peer);
+      if (player) this._peerIdByPlayer.delete(player);
     }
 
     /** 当前应路由到的信令房间（待进房或已在房）。 */
@@ -384,14 +418,20 @@
       return true;
     }
 
-    /** 进入房间：先查信令，无房主则主持，有则做房客。 */
-    joinRoom(roomId) {
+    /**
+     * 进入房间：先查信令，无房主则主持，有则做房客。
+     * @param {string} roomId
+     * @param {{invite?: string}} [options] 私密房邀请口令（来自链接 ?invite=）
+     */
+    joinRoom(roomId, options) {
       this._clearReconnectTimer();
       this._intentionalLeave = false;
       this._hostGone = false;
       const target = normalizeRoomId(roomId);
       if (!target) return;
-      this._pendingJoin = { room: target };
+      const invite = options && options.invite != null ? String(options.invite) : '';
+      this._pendingInvite = invite;
+      this._pendingJoin = { room: target, invite };
       if (!this._wsServesRoom(target)) {
         this._closeWsForReroute();
         this.connect();
@@ -408,7 +448,9 @@
     _beginRoomEntry(roomId) {
       const target = normalizeRoomId(roomId);
       if (!target) return;
-      this._pendingJoin = { room: target };
+      const invite = (this._pendingJoin && this._pendingJoin.invite) || this._pendingInvite || '';
+      this._pendingInvite = invite;
+      this._pendingJoin = { room: target, invite };
       if (!this._wsServesRoom(target)) {
         this._closeWsForReroute();
         this.connect();
@@ -422,7 +464,8 @@
       const target = normalizeRoomId(roomId || (this._pendingJoin && this._pendingJoin.room));
       if (!target) return;
       if (!this._wsServesRoom(target)) {
-        this._pendingJoin = { room: target };
+        const invite = (this._pendingJoin && this._pendingJoin.invite) || this._pendingInvite || '';
+        this._pendingJoin = { room: target, invite };
         this._closeWsForReroute();
         this.connect();
         return;
@@ -435,6 +478,7 @@
       const target = normalizeRoomId(roomId);
       this._role = 'host';
       this.roomId = target;
+      this._privateRoom = false;
       this._hostRoom = new global.P2pHostRoom({
         selfId: this.selfId || this._signalPeerId,
         getDisplayName: () => (this.getDisplayName ? this.getDisplayName() : this.nickname),
@@ -483,14 +527,16 @@
       }
     }
 
-    /** 房客数据通道打开后发送 join。 */
+    /** 房客数据通道打开后发送 join（私密房附带 invite）。 */
     _onGuestChannelOpen() {
       const displayName = this.getDisplayName ? this.getDisplayName() : this.nickname;
+      const invite = (this._pendingJoin && this._pendingJoin.invite) || this._pendingInvite || '';
       global.P2pTransport.sendOnLink(this._hostLink, {
         type: 'join',
         room: this.roomId,
         name: displayName,
-        player_id: this.selfId || this._signalPeerId
+        player_id: this.selfId || this._signalPeerId,
+        invite
       });
     }
 
@@ -500,7 +546,14 @@
       if (this._inRoom && this.roomId) {
         this.lastError = '连接已断开，正在重新连接…';
         this._scheduleReconnect(this.roomId);
+        return;
       }
+      /* 进房中被拒或通道先于 room_removed 关闭：回到大厅并复位加入按钮 */
+      this.lastError = this.lastError || '无法进入房间';
+      this._dispatch({
+        type: 'room_removed',
+        message: this.lastError
+      });
     }
 
     /**
@@ -520,7 +573,7 @@
     /** 房客是否仍可绘制（缺省 true）。 */
     _guestCanDraw(peerId) {
       if (!this._hostRoom) return true;
-      const row = this._hostRoom.players.get(peerId);
+      const row = this._hostRoom.players.get(this._playerIdForPeer(peerId));
       return !row || row.can_draw !== false;
     }
 
@@ -607,7 +660,7 @@
       }
       if (type === 'join') {
         const playerId = String(data.player_id || peerId);
-        const result = this._hostRoom.acceptGuestJoin(playerId, data.name);
+        const result = this._hostRoom.acceptGuestJoin(playerId, data.name, data.invite);
         const link = this._guestLinks.get(peerId);
         if (result && result.rejected) {
           global.P2pTransport.sendOnLink(link, {
@@ -617,6 +670,7 @@
           this._closeGuestLink(peerId);
           return;
         }
+        this._bindGuestIdentity(peerId, playerId);
         global.P2pTransport.sendOnLink(link, result.roomState);
         this._dispatch(result.playerJoin);
         this._broadcastToGuests(result.playerJoin, peerId);
@@ -626,8 +680,9 @@
         this._removeGuest(peerId);
         return;
       }
+      const playerId = this._playerIdForPeer(peerId);
       if (type === 'player_style') {
-        const styleMsg = this._hostRoom.applyPlayerStyle(peerId, data);
+        const styleMsg = this._hostRoom.applyPlayerStyle(playerId, data);
         if (styleMsg) {
           this._dispatch(styleMsg);
           this._broadcastToGuests(styleMsg);
@@ -638,7 +693,7 @@
         return;
       }
       if (type === 'drawing_sync_request') {
-        const snap = this.getRoomSnapshot ? this.getRoomSnapshot(peerId) : null;
+        const snap = this.getRoomSnapshot ? this.getRoomSnapshot(playerId) : null;
         if (snap) {
           global.P2pTransport.sendOnLink(this._guestLinks.get(peerId), {
             type: 'drawing_sync',
@@ -655,7 +710,7 @@
         return;
       }
       if (this.runHostAuthority) {
-        const authored = this.runHostAuthority(peerId, data);
+        const authored = this.runHostAuthority(playerId, data);
         if (authored) {
           authored.forEach(msg => {
             this._dispatch(msg);
@@ -666,12 +721,12 @@
       }
       const forward = Object.assign({}, data);
       if (type === 'draw' || type === 'draw_batch' || type === 'stroke_visibility') {
-        forward.owner_id = peerId;
+        forward.owner_id = playerId;
       }
       if (type === 'cursor_move') {
         forward.type = 'cursor_update';
-        forward.player_id = peerId;
-        const row = this._hostRoom.players.get(peerId);
+        forward.player_id = playerId;
+        const row = this._hostRoom.players.get(playerId);
         if (row) forward.nickname = row.name;
       }
       this._dispatch(forward);
@@ -680,9 +735,10 @@
 
     /** 房客断开时清理成员。 */
     _onGuestPeerClosed(peerId) {
+      const playerId = this._playerIdForPeer(peerId);
       this._closeGuestLink(peerId);
       if (!this._hostRoom) return;
-      const leave = this._hostRoom.removePlayer(peerId);
+      const leave = this._hostRoom.removePlayer(playerId);
       if (leave) {
         this._dispatch(leave);
         this._broadcastToGuests(leave);
@@ -695,6 +751,7 @@
 
     _closeGuestLink(peerId) {
       const link = this._guestLinks.get(peerId);
+      this._unbindGuestIdentity(peerId);
       if (link) {
         global.P2pTransport.closeLink(link);
         this._guestLinks.delete(peerId);
@@ -713,6 +770,8 @@
       this._teardownGuestLinkOnly();
       this._guestLinks.forEach(link => global.P2pTransport.closeLink(link));
       this._guestLinks.clear();
+      this._playerIdByPeer.clear();
+      this._peerIdByPlayer.clear();
       this._hostRoom = null;
     }
 
@@ -734,7 +793,9 @@
       this._inRoom = false;
       this.roomId = '';
       this._role = '';
+      this._privateRoom = false;
       this._pendingJoin = null;
+      this._pendingInvite = '';
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.close(4000);
         this.ws = null;
@@ -760,7 +821,8 @@
         if (this._intentionalLeave || this._hostGone) return;
         this._reconnecting = true;
         this.roomId = targetRoom;
-        this._pendingJoin = { room: targetRoom };
+        const invite = this._pendingInvite || '';
+        this._pendingJoin = { room: targetRoom, invite };
         this._teardownMedia();
         this._role = '';
         this.connect();
@@ -838,6 +900,9 @@
       if (type === 'room_removed' && this._role === 'guest' && !this._intentionalLeave) {
         this._markHostGone(data.message || '房间已解散');
       }
+      if (type === 'room_private' && data.private_room != null) {
+        this._privateRoom = Boolean(data.private_room);
+      }
       const handler = this.handlers[type] || this.handlers['*'];
       if (handler) handler(data);
       if (type === 'room_state' && data.room_id) {
@@ -849,6 +914,7 @@
         this._intentionalLeave = false;
         this.lastError = '';
         if (data.self_id) this.selfId = data.self_id;
+        if (data.private_room != null) this._privateRoom = Boolean(data.private_room);
       }
     }
 
@@ -893,19 +959,46 @@
       return true;
     }
 
+    /**
+     * 房主：开关私密房间（仅邀请链接可进）。
+     * @param {boolean} enabled
+     */
+    sendHostPrivateRoom(enabled) {
+      if (this._role !== 'host' || !this._hostRoom) return false;
+      const msg = this._hostRoom.setPrivateRoom(this.selfId, enabled);
+      if (!msg) return false;
+      this._privateRoom = Boolean(msg.private_room);
+      this._dispatch(msg);
+      this._broadcastToGuests(msg);
+      return true;
+    }
+
+    /** 房主本机邀请口令（仅主机有；用于复制链接）。 */
+    getInviteToken() {
+      if (this._role !== 'host' || !this._hostRoom) return '';
+      return this._hostRoom.inviteToken || '';
+    }
+
+    /** 当前房间是否私密（房主权威或已同步的状态）。 */
+    isPrivateRoom() {
+      if (this._hostRoom) return Boolean(this._hostRoom.privateRoom);
+      return Boolean(this._privateRoom);
+    }
+
     /** 房主：踢出指定玩家。 */
     kickPlayer(targetId) {
       if (this._role !== 'host' || !this._hostRoom) return false;
       const tid = String(targetId || '');
       if (!this._hostRoom.kickPlayer(this.selfId, tid)) return false;
-      const link = this._guestLinks.get(tid);
+      const peerId = this._peerIdByPlayer.get(tid) || tid;
+      const link = this._guestLinks.get(peerId);
       if (link) {
         global.P2pTransport.sendOnLink(link, {
           type: 'room_removed',
           message: '你已被房主移出房间'
         });
       }
-      this._closeGuestLink(tid);
+      this._closeGuestLink(peerId);
       const leave = {
         type: 'player_leave',
         player_id: tid,

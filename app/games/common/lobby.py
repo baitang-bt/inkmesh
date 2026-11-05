@@ -49,10 +49,12 @@ def list_joinable_lobby_rooms(rooms: Dict[str, Dict]) -> List[str]:
 
 
 def list_joinable_collab_rooms(rooms: Dict[str, Dict]) -> List[str]:
-    """返回合作画板可随机加入的房间：非 P 开头，且仍有在线玩家。"""
+    """返回合作画板可随机加入的房间：非 P 开头、非私密、且仍有在线玩家。"""
     result: List[str] = []
     for room_id, room in rooms.items():
         if str(room_id).upper().startswith("P"):
+            continue
+        if room.get("private_room"):
             continue
         if not any(player.get("connected") for player in room.get("players", {}).values()):
             continue

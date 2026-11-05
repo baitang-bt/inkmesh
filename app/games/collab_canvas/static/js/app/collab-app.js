@@ -91,17 +91,41 @@
     return id;
   }
 
+  /** 从当前地址栏读取邀请口令。 */
+  function inviteFromUrl() {
+    try {
+      return String(new URLSearchParams(location.search).get('invite') || '').trim();
+    } catch (_err) {
+      return '';
+    }
+  }
+
   function roomShareUrl(roomId) {
     const id = String(roomId || '').trim();
     if (!id) return '';
-    return location.origin + basePath + '/' + encodeURIComponent(id);
+    let link = location.origin + basePath + '/' + encodeURIComponent(id);
+    const isHost = session && session._role === 'host';
+    const token = isHost && session.getInviteToken ? session.getInviteToken() : '';
+    const isPrivate = (session && session.isPrivateRoom && session.isPrivateRoom())
+      || (boardController && boardController.privateRoom);
+    if (isPrivate && token) {
+      link += '?invite=' + encodeURIComponent(token);
+    }
+    return link;
   }
 
   function syncRoomDeepLink(roomId) {
     const id = String(roomId || '').trim().toUpperCase();
     if (!id) return;
-    const target = basePath + '/' + encodeURIComponent(id);
-    if (location.pathname === target) return;
+    let target = basePath + '/' + encodeURIComponent(id);
+    let invite = inviteFromUrl();
+    if (!invite && session && session.isPrivateRoom && session.isPrivateRoom()
+      && session.getInviteToken) {
+      invite = session.getInviteToken() || '';
+    }
+    if (invite) target += '?invite=' + encodeURIComponent(invite);
+    const current = location.pathname + location.search;
+    if (current === target) return;
     try {
       history.replaceState(null, '', target);
     } catch (_err) {}
@@ -114,8 +138,13 @@
     setJoinError(message || '');
     setJoinStatus('');
     setStatus('');
+    const privateBadge = document.getElementById('privateRoomBadge');
+    if (privateBadge) privateBadge.classList.add('hidden');
+    if (boardController) boardController.privateRoom = false;
+    if (roomPanel && roomPanel.setPrivateRoom) roomPanel.setPrivateRoom(false);
     try {
-      history.replaceState(null, '', basePath);
+      /* 有错误文案时保留深链（含 ?invite=），方便刷新/同号重试；主动离开则清干净 */
+      if (!message) history.replaceState(null, '', basePath);
     } catch (_err) {}
     if (lobbyHome) lobbyHome.refresh();
   }
@@ -298,7 +327,20 @@
     const roomId = session.roomId || (roomCodeEl && roomCodeEl.textContent);
     const link = roomShareUrl(roomId);
     if (!link) return;
-    navigator.clipboard.writeText(link).then(() => setStatus('链接已复制'));
+    const isHost = session && session._role === 'host';
+    const privateOn = (session && session.isPrivateRoom && session.isPrivateRoom())
+      || (boardController && boardController.privateRoom);
+    if (privateOn && isHost && !(session.getInviteToken && session.getInviteToken())) {
+      setStatus('私密房间尚未生成邀请口令，请重新开启私密后再复制');
+      return;
+    }
+    if (privateOn && !isHost) {
+      setStatus('请让房主复制邀请链接');
+      return;
+    }
+    navigator.clipboard.writeText(link).then(() => {
+      setStatus(privateOn ? '邀请链接已复制' : '链接已复制');
+    });
   }
 
   /** 房主退出：有房客则自动转移房主；无房客则提醒保存 .inkmesh。 */
@@ -460,7 +502,19 @@
     getOwnerId: () => boardController.ownerId,
     onKick: targetId => session.kickPlayer(targetId),
     onSetPermissions: patch => session.sendHostPermissions(patch),
-    onSetMaxPlayers: maxPlayers => session.sendHostMaxPlayers(maxPlayers)
+    onSetMaxPlayers: maxPlayers => session.sendHostMaxPlayers(maxPlayers),
+    onSetPrivateRoom: enabled => {
+      const ok = session.sendHostPrivateRoom(enabled);
+      if (!ok) {
+        if (roomPanel) roomPanel.setPrivateRoom(!enabled);
+        return;
+      }
+      if (roomPanel) roomPanel.setPrivateRoom(enabled);
+      if (boardController.handleRoomPrivate) {
+        boardController.handleRoomPrivate({ private_room: enabled });
+      }
+      if (enabled) syncRoomDeepLink(session.roomId);
+    }
   });
 
   const roomPanelToggleBtn = document.getElementById('roomPanelToggleBtn');
@@ -501,7 +555,13 @@
     getDisplayName: () => onlinePrefs.resolveDisplayName(nickname)
   });
 
-  function enterRoom(roomId) {
+  /**
+   * 进入房间。
+   * @param {string} roomId
+   * @param {{invite?: string, fromUrl?: boolean}} [options]
+   *   fromUrl：深链进房时带上地址栏 invite；大厅手输不加 invite。
+   */
+  function enterRoom(roomId, options) {
     const id = String(roomId || '').trim().toUpperCase().slice(0, ROOM_ID_MAX_LEN);
     if (!id) {
       setJoinError('请输入房间号');
@@ -520,7 +580,16 @@
       PbccLocalStore.setRestorePref(pendingRestoreLocal);
     }
     restoreAttempted = false;
-    session.joinRoom(id);
+    const opts = options || {};
+    let invite = opts.invite != null ? String(opts.invite) : '';
+    if (!invite && opts.fromUrl) invite = inviteFromUrl();
+    /* 地址栏仍指向本房间且带 invite：深链失败后同号重试；大厅手输其它房号不加 */
+    if (!invite) {
+      const pathRoom = roomIdFromPath();
+      const urlInvite = inviteFromUrl();
+      if (urlInvite && pathRoom && pathRoom === id) invite = urlInvite;
+    }
+    session.joinRoom(id, invite ? { invite } : {});
   }
 
   function resetJoinControls() {
@@ -651,7 +720,7 @@
       restoreAttempted = false;
       setStatus('正在进入房间…');
       if (joinBtn) joinBtn.disabled = true;
-      session.joinRoom(pathRoom);
+      session.joinRoom(pathRoom, { invite: inviteFromUrl() });
     }
   });
 })(window);

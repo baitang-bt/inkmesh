@@ -109,6 +109,21 @@
       });
     },
 
+    /**
+     * 更新本机快照里第一块画板的显示标题（大厅改名用）。
+     * @returns {Promise<boolean>} 是否写成功
+     */
+    async renameBoardTitle(userId, roomId, title) {
+      const next = String(title || '').trim().slice(0, 40);
+      if (!next) return false;
+      const doc = await this.load(userId, roomId);
+      if (!doc || !Array.isArray(doc.boards) || !doc.boards.length) return false;
+      const boards = doc.boards.slice();
+      boards[0] = Object.assign({}, boards[0], { title: next });
+      await this.save(userId, roomId, Object.assign({}, doc, { boards }));
+      return true;
+    },
+
     /** 读取「恢复上次画板」勾选偏好。 */
     getRestorePref() {
       try {

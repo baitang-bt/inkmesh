@@ -74,21 +74,37 @@
         </div>
       </section>
 
-      <aside class="lobby-peers" aria-label="最近一起画过的人">
+      <aside class="lobby-peers" aria-label="一起画过的人">
         <section class="lobby-profile" aria-label="个人资料">
           <button type="button" id="lobbyProfileAvatar" class="lobby-profile-avatar" aria-label="昵称颜色">
             <span id="lobbyProfileInitial" aria-hidden="true"></span>
           </button>
           <label class="lobby-profile-fields">
             <span class="lobby-profile-kicker">昵称</span>
-            <input id="lobbyProfileName" class="lobby-profile-name" type="text" maxlength="24" autocomplete="nickname" spellcheck="false">
+            <input id="lobbyProfileName" class="lobby-profile-name" type="text" maxlength="24" autocomplete="nickname" spellcheck="false" aria-describedby="lobbyProfileNameHint">
+            <p id="lobbyProfileNameHint" class="lobby-profile-name-hint" role="status" aria-live="polite"></p>
           </label>
         </section>
-        <header class="lobby-peers-header">
-          <h2>最近一起画过的人</h2>
-        </header>
-        <ul id="lobbyPeerList" class="lobby-peer-list"></ul>
-        <p id="lobbyPeerEmpty" class="lobby-peer-empty">进过房间后，同房的人会出现在这里。</p>
+        <section class="lobby-peer-section" data-peer-section="starred">
+          <button type="button" class="lobby-peer-section-toggle" data-peer-toggle="starred" aria-expanded="true">
+            <span class="lobby-peer-section-title">标星</span>
+            <span class="lobby-peer-section-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="lobby-peer-section-body" data-peer-body="starred">
+            <ul id="lobbyStarredPeerList" class="lobby-peer-list"></ul>
+            <p id="lobbyStarredEmpty" class="lobby-peer-empty">点 ★ 收藏最近一起画过的人。</p>
+          </div>
+        </section>
+        <section class="lobby-peer-section" data-peer-section="recent">
+          <button type="button" class="lobby-peer-section-toggle" data-peer-toggle="recent" aria-expanded="true">
+            <span class="lobby-peer-section-title">最近一起画过的人</span>
+            <span class="lobby-peer-section-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="lobby-peer-section-body" data-peer-body="recent">
+            <ul id="lobbyPeerList" class="lobby-peer-list"></ul>
+            <p id="lobbyPeerEmpty" class="lobby-peer-empty">进过房间后，同房的人会出现在这里。</p>
+          </div>
+        </section>
       </aside>
     </section>
 
@@ -99,6 +115,7 @@
             <h1>Inkmesh</h1>
             <span id="roomCode" class="room-badge">----</span>
             <span id="memberCount" class="room-badge">0/0</span>
+            <span id="privateRoomBadge" class="room-badge room-badge-private hidden" aria-label="私密房间">私密</span>
           </div>
           <div class="collab-topbar-right">
             <button type="button" id="undoBtn" class="ws-btn" data-tooltip="撤销"><span class="material-symbols-outlined ws-btn-icon" aria-hidden="true">undo</span>撤销</button>
@@ -359,9 +376,9 @@
               <h3 class="settings-subsection-head"><span>显示名称</span></h3>
               <label class="settings-row">
                 <span class="settings-row-label">昵称</span>
-                <input id="settingsOnlineDisplayName" class="settings-text-input" type="text" maxlength="24" placeholder="联机显示名" autocomplete="nickname">
+                <input id="settingsOnlineDisplayName" class="settings-text-input" type="text" maxlength="24" placeholder="最长 12 字" autocomplete="nickname" aria-describedby="settingsOnlineDisplayNameHint">
               </label>
-              <p class="settings-hint">仅本机记忆，进房后对同房其他人可见。</p>
+              <p id="settingsOnlineDisplayNameHint" class="settings-hint settings-name-hint" role="status" aria-live="polite">最长 12 字（标点也算）；可用 。.？_/ 等常用标点。</p>
             </section>
             <section class="settings-subsection">
               <h3 class="settings-subsection-head"><span>光标标签</span></h3>
@@ -407,11 +424,20 @@
           </button>
         </header>
         <div class="room-panel-options hidden" data-room-options>
-          <label class="room-panel-option-row">
-            <span class="room-panel-option-label">人数上限</span>
-            <select id="roomMaxPlayersSelect" data-room-max-players aria-label="房间人数上限"></select>
+          <div class="room-panel-option-row">
+            <span class="room-panel-option-label" id="roomMaxPlayersLabel">人数上限</span>
+            <div class="room-max-players-stepper" role="group" aria-labelledby="roomMaxPlayersLabel">
+              <button type="button" class="room-max-players-btn" data-room-max-dec aria-label="减少人数上限">−</button>
+              <input id="roomMaxPlayersInput" class="room-max-players-input" type="number" inputmode="numeric" min="1" max="16" step="1" value="8" data-room-max-players aria-label="房间人数上限">
+              <button type="button" class="room-max-players-btn" data-room-max-inc aria-label="增加人数上限">+</button>
+            </div>
+          </div>
+          <p class="room-panel-option-hint">范围 1–16；减少上限不会踢出已在房内的人；满员后拒绝新人加入。</p>
+          <label class="room-panel-option-row room-panel-option-check">
+            <span class="room-panel-option-label">私密房间（仅邀请链接可进）</span>
+            <input id="roomPrivateToggle" type="checkbox" data-room-private aria-describedby="roomPrivateHint">
           </label>
-          <p class="room-panel-option-hint">减少上限不会踢出已在房内的人；满员后拒绝新人加入。</p>
+          <p id="roomPrivateHint" class="room-panel-option-hint">开启后仅能通过「复制链接」得到的邀请链接进入；手输房间号无效。</p>
         </div>
         <div class="room-panel-batch hidden" data-room-batch-bar>
           <span class="room-panel-batch-label">批量</span>

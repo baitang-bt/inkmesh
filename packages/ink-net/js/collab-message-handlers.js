@@ -38,6 +38,10 @@
       if (data.max_players != null) {
         this.maxPlayers = Number(data.max_players) || this.maxPlayers || 8;
       }
+      if (data.private_room != null) {
+        this.privateRoom = Boolean(data.private_room);
+      }
+      this._syncPrivateBadge();
       this.onRoomChange(data);
       this._updateMemberCount(data.players);
       this.setPlayersSnapshot(data.players);
@@ -47,10 +51,23 @@
       proto.handleRoomMaxPlayers = function(data) {
         const n = Math.floor(Number(data && data.max_players));
         if (!Number.isFinite(n)) return;
-        const min = (global.RoomPanelLimits && RoomPanelLimits.MIN) || 2;
-        const max = (global.RoomPanelLimits && RoomPanelLimits.MAX) || 30;
+        const min = (global.RoomPanelLimits && RoomPanelLimits.MIN) || 1;
+        const max = (global.RoomPanelLimits && RoomPanelLimits.MAX) || 16;
         this.maxPlayers = Math.max(min, Math.min(max, n));
         this._updateMemberCount(this.getPlayersSnapshot());
+      };
+
+      /** 应用房主下发的私密房间开关（不含邀请口令）。 */
+      proto.handleRoomPrivate = function(data) {
+        this.privateRoom = Boolean(data && data.private_room);
+        this._syncPrivateBadge();
+      };
+
+      /** 同步顶栏「私密」短提示。 */
+      proto._syncPrivateBadge = function() {
+        const badge = document.getElementById('privateRoomBadge');
+        if (!badge) return;
+        badge.classList.toggle('hidden', !this.privateRoom);
       };
 
       proto._applySelfPermissions = function(players, selfId) {
@@ -174,6 +191,9 @@
         const hostMax = this.session && this.session._hostRoom
           ? this.session._hostRoom.maxPlayers
           : this.maxPlayers;
+        const hostPrivate = this.session && this.session._hostRoom
+          ? Boolean(this.session._hostRoom.privateRoom)
+          : Boolean(this.privateRoom);
         return {
           type: 'room_state',
           protocolVersion: 2,
@@ -181,6 +201,7 @@
           self_id: forPlayerId,
           owner_id: this.ownerId || this.selfId,
           max_players: hostMax || this.maxPlayers || 8,
+          private_room: hostPrivate,
           players,
           boards: this.boardsMeta.length
             ? this.boardsMeta

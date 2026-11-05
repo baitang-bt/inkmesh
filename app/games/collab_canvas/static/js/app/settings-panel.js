@@ -50,6 +50,11 @@
       this.session = settings.session || null;
       this.getNickname = settings.getNickname || (() => '玩家');
       this.displayNameInput = this.modal && this.modal.querySelector('#settingsOnlineDisplayName');
+      this.displayNameHint = this.modal && this.modal.querySelector('#settingsOnlineDisplayNameHint');
+      this._displayNameHintDefault = this.displayNameHint
+        ? this.displayNameHint.textContent
+        : '';
+      this._displayNameHintTimer = null;
       this.labelColorMount = this.modal && this.modal.querySelector('#settingsOnlineLabelColorMount');
       this.labelColorReset = this.modal && this.modal.querySelector('#settingsOnlineLabelReset');
       this.labelPreview = this.modal && this.modal.querySelector('#settingsOnlineLabelPreview');
@@ -234,6 +239,54 @@
     }
 
     /**
+     * 校验昵称输入并更新提示；返回清洗后的报告。
+     * @param {boolean} trimEnds
+     */
+    _inspectDisplayNameInput(trimEnds) {
+      if (!this.displayNameInput) {
+        return { ok: true, value: '', reasons: [] };
+      }
+      const report = global.inspectDisplayName
+        ? inspectDisplayName(this.displayNameInput.value, { trim: !!trimEnds })
+        : {
+          ok: true,
+          value: this.displayNameInput.value.slice(0, 12),
+          reasons: []
+        };
+      if (report.value !== this.displayNameInput.value) {
+        this.displayNameInput.value = report.value;
+      }
+      this._setDisplayNameHint(report);
+      return report;
+    }
+
+    /** 显示昵称问题；无问题时恢复默认说明。 */
+    _setDisplayNameHint(report) {
+      if (!this.displayNameHint) return;
+      if (this._displayNameHintTimer) {
+        clearTimeout(this._displayNameHintTimer);
+        this._displayNameHintTimer = null;
+      }
+      const message = global.formatDisplayNameIssues
+        ? formatDisplayNameIssues(report)
+        : ((report && report.reasons) || []).join('；');
+      if (!message) {
+        this.displayNameHint.textContent = this._displayNameHintDefault || '';
+        this.displayNameHint.classList.remove('is-error');
+        return;
+      }
+      this.displayNameHint.textContent = message;
+      this.displayNameHint.classList.add('is-error');
+      this._displayNameHintTimer = setTimeout(() => {
+        this._displayNameHintTimer = null;
+        if (this.displayNameHint) {
+          this.displayNameHint.textContent = this._displayNameHintDefault || '';
+          this.displayNameHint.classList.remove('is-error');
+        }
+      }, 5000);
+    }
+
+    /**
      * 用 OnlinePrefs 刷新联机昵称、色块和预览。
      * 大厅改同一份偏好时调用，避免设置弹窗还显示旧值。
      */
@@ -286,13 +339,15 @@
       applyStored();
       if (this.displayNameInput) {
         this.displayNameInput.addEventListener('input', () => {
+          const report = this._inspectDisplayNameInput(false);
           if (this.labelPreview) {
             const previewName =
-              this.displayNameInput.value.trim() || this.getNickname() || '玩家';
+              (report.value || '').trim() || this.getNickname() || '玩家';
             this.labelPreview.textContent = previewName;
           }
         });
         this.displayNameInput.addEventListener('change', () => {
+          this._inspectDisplayNameInput(true);
           this.onlinePrefs.setCustomDisplayName(this.displayNameInput.value);
           syncNameControls();
           pushStyle();

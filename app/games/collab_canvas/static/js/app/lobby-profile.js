@@ -49,10 +49,12 @@
       this.avatarBtn = document.getElementById('lobbyProfileAvatar');
       this.initialEl = document.getElementById('lobbyProfileInitial');
       this.nameInput = document.getElementById('lobbyProfileName');
+      this.nameHint = document.getElementById('lobbyProfileNameHint');
       this.colorMode = 'rgb';
       this.popover = null;
       this._rows = [];
       this._applying = false;
+      this._nameHintTimer = null;
     }
 
     /** 绑定改名，以及点色块打开 RGB/HSV 取色。 */
@@ -64,7 +66,10 @@
         });
       }
       if (this.nameInput) {
-        this.nameInput.addEventListener('input', () => this._paintAvatar(this.nameInput.value));
+        this.nameInput.addEventListener('input', () => {
+          this._applyNameInput(false);
+          this._paintAvatar(this.nameInput.value);
+        });
         this.nameInput.addEventListener('change', () => this._commitName());
         this.nameInput.addEventListener('keydown', event => {
           if (event.key === 'Enter') {
@@ -94,10 +99,56 @@
       this._paintAvatar(this.nameInput ? this.nameInput.value : name);
     }
 
+    /**
+     * 校验并清洗昵称输入；有问题时写入提示。
+     * @param {boolean} trimEnds 是否按提交规则去掉首尾空白
+     */
+    _applyNameInput(trimEnds) {
+      if (!this.nameInput) return '';
+      const report = global.inspectDisplayName
+        ? inspectDisplayName(this.nameInput.value, { trim: !!trimEnds })
+        : {
+          ok: true,
+          value: this.nameInput.value.slice(0, 12),
+          reasons: []
+        };
+      if (report.value !== this.nameInput.value) {
+        this.nameInput.value = report.value;
+      }
+      this._setNameHint(report);
+      return report.value;
+    }
+
+    /** 显示或清除昵称校验提示。 */
+    _setNameHint(report) {
+      if (!this.nameHint) return;
+      if (this._nameHintTimer) {
+        clearTimeout(this._nameHintTimer);
+        this._nameHintTimer = null;
+      }
+      const message = global.formatDisplayNameIssues
+        ? formatDisplayNameIssues(report)
+        : ((report && report.reasons) || []).join('；');
+      if (!message) {
+        this.nameHint.textContent = '';
+        this.nameHint.classList.remove('is-error');
+        return;
+      }
+      this.nameHint.textContent = message;
+      this.nameHint.classList.add('is-error');
+      this._nameHintTimer = setTimeout(() => {
+        this._nameHintTimer = null;
+        if (this.nameHint) {
+          this.nameHint.textContent = '';
+          this.nameHint.classList.remove('is-error');
+        }
+      }, 5000);
+    }
+
     /** 把输入写回偏好；空则回退启动昵称。 */
     _commitName() {
       if (!this.onlinePrefs || !this.nameInput) return;
-      const next = this.nameInput.value.trim().slice(0, 24);
+      const next = this._applyNameInput(true);
       const current = this.onlinePrefs.resolveDisplayName(this.defaultNickname);
       if (next === current) {
         this.refresh();

@@ -67,6 +67,7 @@
         if (ctx.roomPanel) {
           ctx.roomPanel.setPlayers(data.players || []);
           if (data.max_players != null) ctx.roomPanel.setMaxPlayers(data.max_players);
+          if (data.private_room != null) ctx.roomPanel.setPrivateRoom(data.private_room);
         }
         if (Array.isArray(data.players)) {
           data.players.forEach(player => {
@@ -146,6 +147,14 @@
         }
         if (ctx.roomPanel && data.max_players != null) {
           ctx.roomPanel.setMaxPlayers(data.max_players);
+        }
+      },
+      room_private: data => {
+        if (ctx.boardController && ctx.boardController.handleRoomPrivate) {
+          ctx.boardController.handleRoomPrivate(data);
+        }
+        if (ctx.roomPanel && data.private_room != null) {
+          ctx.roomPanel.setPrivateRoom(data.private_room);
         }
       },
       player_join: data => {

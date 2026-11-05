@@ -2,8 +2,8 @@
   'use strict';
 
   const PROTOCOL_VERSION = 2;
-  const MAX_PLAYERS_MIN = 2;
-  const MAX_PLAYERS_MAX = 30;
+  const MAX_PLAYERS_MIN = 1;
+  const MAX_PLAYERS_MAX = 16;
   const MAX_PLAYERS_DEFAULT = 8;
 
   /** 将人数上限夹到合法范围。 */
@@ -13,8 +13,19 @@
     return Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, n));
   }
 
+  /** 生成邀请口令（约 32 位 hex）。 */
+  function generateInviteToken() {
+    const bytes = new Uint8Array(16);
+    if (global.crypto && crypto.getRandomValues) {
+      crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  }
+
   /** 默认画板元数据与空白笔迹（新房主进房用）。 */
-  function defaultEmptySnapshot(roomId, selfId, displayName, maxPlayers) {
+  function defaultEmptySnapshot(roomId, selfId, displayName, maxPlayers, privateRoom) {
     const canvas = { mode: 'vector', width: 1920, height: 1080 };
     const layers = [
       {
@@ -65,6 +76,7 @@
       self_id: selfId,
       owner_id: selfId,
       max_players: clampMaxPlayers(maxPlayers),
+      private_room: Boolean(privateRoom),
       players: [
         {
           uid: selfId,
@@ -107,6 +119,8 @@
       this.getRoomSnapshot = settings.getRoomSnapshot || null;
       this.players = new Map();
       this.maxPlayers = clampMaxPlayers(settings.maxPlayers || MAX_PLAYERS_DEFAULT);
+      this.privateRoom = false;
+      this.inviteToken = '';
     }
 
     /** 房主开房时写入自己。 */
@@ -114,6 +128,8 @@
       const name = this.getDisplayName();
       this.players.clear();
       this.maxPlayers = clampMaxPlayers(this.maxPlayers || MAX_PLAYERS_DEFAULT);
+      this.privateRoom = false;
+      this.inviteToken = '';
       this.players.set(this.selfId, {
         uid: this.selfId,
         name,
@@ -124,7 +140,7 @@
         can_draw: true,
         can_save: true
       });
-      return defaultEmptySnapshot(roomId, this.selfId, name, this.maxPlayers);
+      return defaultEmptySnapshot(roomId, this.selfId, name, this.maxPlayers, false);
     }
 
     /** 当前成员列表（数组）。 */
@@ -132,14 +148,29 @@
       return Array.from(this.players.values());
     }
 
-    /** 处理房客 join，返回发给该房客的 room_state 与广播用的 player_join。 */
-    acceptGuestJoin(playerId, displayName) {
+    /**
+     * 处理房客 join，返回发给该房客的 room_state 与广播用的 player_join。
+     * 私密房须带正确 invite；已在成员表的重连免校验。
+     */
+    acceptGuestJoin(playerId, displayName, invite) {
       if (this.players.has(playerId)) {
-        /* 重连同一人：不占新名额 */
+        /* 重连同一人：不占新名额、不重复校验邀请口令 */
+      } else if (this.privateRoom) {
+        const token = String(this.inviteToken || '');
+        const given = String(invite || '');
+        if (!token || given !== token) {
+          return {
+            rejected: true,
+            reason: 'invite_required',
+            message: '这是私密房间，请使用房主分享的邀请链接进入'
+          };
+        }
       } else if (this.players.size >= this.maxPlayers) {
         return { rejected: true, reason: 'room_full', message: '房间已满' };
       }
-      const name = String(displayName || '').trim().slice(0, 24) || '玩家';
+      const name = (global.sanitizeDisplayName
+        ? sanitizeDisplayName(displayName)
+        : String(displayName || '').trim().slice(0, 12)) || '玩家';
       const row = {
         uid: playerId,
         name,
@@ -160,7 +191,8 @@
           (state && state.room_id) || '',
           playerId,
           name,
-          this.maxPlayers
+          this.maxPlayers,
+          this.privateRoom
         );
         state.self_id = playerId;
         state.owner_id = this.selfId;
@@ -171,6 +203,7 @@
           self_id: playerId,
           owner_id: this.selfId,
           max_players: this.maxPlayers,
+          private_room: this.privateRoom,
           players: this.listPlayers()
         });
       }
@@ -196,13 +229,31 @@
       return { type: 'room_max_players', max_players: this.maxPlayers };
     }
 
+    /**
+     * 房主开关私密房间；开启时生成邀请口令，关闭时清空。
+     * @returns {{ type: string, private_room: boolean }|null}
+     */
+    setPrivateRoom(fromId, enabled) {
+      if (fromId !== this.selfId) return null;
+      const next = Boolean(enabled);
+      this.privateRoom = next;
+      if (next) {
+        this.inviteToken = this.inviteToken || generateInviteToken();
+      } else {
+        this.inviteToken = '';
+      }
+      return { type: 'room_private', private_room: this.privateRoom };
+    }
+
     /** 更新成员显示名或标签色。 */
     applyPlayerStyle(playerId, patch) {
       const row = this.players.get(playerId);
       if (!row) return null;
       const next = Object.assign({}, row);
       if (patch.display_name != null) {
-        const name = String(patch.display_name || '').trim().slice(0, 24);
+        const name = global.sanitizeDisplayName
+          ? sanitizeDisplayName(patch.display_name)
+          : String(patch.display_name || '').trim().slice(0, 12);
         if (name) next.name = name;
       }
       if (patch.label_color != null) next.label_color = patch.label_color || '';
@@ -267,6 +318,7 @@
     MAX_PLAYERS_MIN,
     MAX_PLAYERS_MAX,
     MAX_PLAYERS_DEFAULT,
-    clampMaxPlayers
+    clampMaxPlayers,
+    generateInviteToken
   };
 })(window);

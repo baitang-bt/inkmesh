@@ -69,6 +69,7 @@
       this.boardOrder = [];
       this.ownerId = '';
       this.maxPlayers = (global.RoomPanelLimits && RoomPanelLimits.DEFAULT) || 8;
+      this.privateRoom = false;
       this.canDraw = true;
       this.canSave = true;
       this.isDrawing = false;

@@ -6,6 +6,7 @@ import json
 import logging
 import random
 import time
+import unicodedata
 import uuid
 from typing import Dict, List, Optional, Set
 from urllib.parse import quote
@@ -163,9 +164,23 @@ def player_can_save(room: Dict, player_id: str) -> bool:
     return bool(pdata.get("can_save", True))
 
 
+_DISPLAY_NAME_MAX = 12
+_DISPLAY_NAME_PUNCT = set(
+    "。．.？?！!、，,：:；;·…—–-_/~～@#%&+=（）()【】[]「」『』《》<>\"'“”‘’"
+)
+
+
 def parse_display_name(value: object) -> str:
-    """校验合作画板显示名（客户端 join / player_style 上送）。"""
-    return str(value or "").strip()[:24]
+    """校验显示名：最长 12；字母/数字/汉字/空格 + 常用标点。"""
+    raw = str(value or "").strip()
+    out: list[str] = []
+    for ch in raw:
+        if len(out) >= _DISPLAY_NAME_MAX:
+            break
+        cat = unicodedata.category(ch)
+        if cat.startswith("L") or cat.startswith("N") or ch == " " or ch in _DISPLAY_NAME_PUNCT:
+            out.append(ch)
+    return "".join(out).strip()
 
 
 def parse_label_color(value: object) -> str:

@@ -82,7 +82,8 @@
 | `ping` | 无字段；服务端回复 `pong`，客户端用于 RTT 检测 |
 | `player_style` | `label_color?`、`display_name?` — 更新标签色与显示名（仅本游戏） |
 | `host_set_permissions` | 仅房主；`target_id?`（省略则全部房客）、`can_draw?`、`can_save?` |
-| `host_set_max_players` | 仅房主；`max_players`（2–30）；**减少上限不踢出已在房内的人**；满员后拒绝新人 |
+| `host_set_max_players` | 仅房主；`max_players`（1–16）；**减少上限不踢出已在房内的人**；满员后拒绝新人 |
+| `join` | 房客→房主；可含 `invite`（私密房必填，与链接 `?invite=` 一致） |
 | `kick_player` | 仅房主；`target_id` |
 | `room_import` | 仅房主；`document` — 完整 `.inkmesh` / 旧版 `.pbcc` JSON 对象（见下文） |
 
@@ -90,8 +91,9 @@
 
 | type | 说明 |
 |------|------|
-| `room_state` | 含 `layers[]`、`active_layer_id`、`max_players`；`players[]` 含 `can_draw`、`can_save`、`connected`、`is_host`、`active_board_id` |
+| `room_state` | 含 `layers[]`、`active_layer_id`、`max_players`、`private_room`；`players[]` 含 `can_draw`、`can_save`、`connected`、`is_host`、`active_board_id`（**不含**邀请口令） |
 | `room_max_players` | `max_players` — 房主改人数上限后广播 |
+| `room_private` | `private_room` — 房主开关私密后广播（不含 token） |
 | `drawing_sync` | 含 `layers[]` + strokes |
 | `layer_added` / `layer_removed` / `layer_renamed` / `layer_reordered` / `layer_updated` | 图层变更 |
 | `layer_duplicated` | `board_id`, `source_layer_id`, `layer`, `strokes[]`, `created_by` — 图层副本含克隆 strokes |
@@ -113,7 +115,8 @@
 ## 房间面板（客户端 UI）
 
 - 按 **Tab** 开关「房间成员」面板：在线/暂离、本机 RTT、房主批量/单人权限与踢出。
-- 房主可见顶部「人数上限」（默认 8，范围 2–30）；顶栏成员数显示为 `在线/上限`。
+- 房主可见顶部「人数上限」（默认 8，范围 1–16，数值框 + 加减）；顶栏成员数显示为 `在线/上限`。
+- 房主可开「私密房间」：仅带 `?invite=` 的邀请链接可进；手输房间号 / 无口令深链会被拒。口令只在房主本机用于复制链接，不广播给房客。已在成员表的重连免校验。
 
 ## 客户端导出（纯浏览器）
 
@@ -188,6 +191,7 @@
 ## 联机显示名（客户端）
 
 - Inkmesh 无通行证；在设置「联机」或大厅资料里填写**昵称**（localStorage 记忆）。
+- **规则**：最长 **12** 个字符（每个标点也计 1）；允许字母 / 数字 / 汉字 / 空格，以及常用标点 `。．.？?！!、，,：:；;·…—–-_/~～@#%&+=` 与常见括号引号。其它符号丢弃。
 - 未填写时回退启动引导名 / `玩家`。
 - 加入房间与 `player_style.display_name` 均会更新 `players[].name`，并广播 `player_style`。
 

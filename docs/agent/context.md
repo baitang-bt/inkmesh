@@ -2,12 +2,12 @@
 
 > 多 Agent / 多对话共享的项目记忆。Hub `conversations/{标题}.md` 只存指针与本场状态；**可复用的决策与进展写在此文件**。
 >
-> 最后更新：2026-11-05 18:50 +0800
+> 最后更新：2026-11-05 20:25 +0800
 
 ## 当前焦点
 
-- **任务**：联机体验收口；人数上限 / `.inkmesh` 已落地；离房顶栏人数已修
-- **下一步**：推送 Pages（`20261105f`）；TURN / 公开房间发现仍未做
+- **任务**：私密房间（仅邀请链接进房）已落地（`20261105l`）
+- **下一步**：用户确认后推送；TURN / 公开房间发现仍未做
 - **活跃对话**：inkmesh - Main、inkmesh UI、画板P2P独立工作区、联机连接测试、pages-share
 
 ## 活跃泳道
@@ -25,7 +25,7 @@
 | inkmesh P2P修复 | net-fix | `packages/ink-net/js/{p2p-transport,collab-session}.js`、`routes.py` 资源版本（用户指定修 1–4；不含公开发现） | done | 2026-11-02 |
 | pages-share | pages-share | `packages/ink-net/signal-worker/**`、`scripts/export-pages.py`、`deploy/pages/**`、`.github/workflows/pages.yml`、PWA（manifest/sw）、`static/js/app/{collab-app,pwa-install}.js`、`templates/index.html` 的 PWA/config 装配、`README.md` 公开访问 | active | 2026-11-03 |
 | 检查下新内容的代码并修复 | pages-review | 复查并修 pages-share：`signal-worker`、`export-pages.py`、`collab-app.js`、`routes.py` 资源版本；离房 `_updateMemberCount` | active | 2026-11-05 |
-| inkmesh - Main | room-cap | 房间人数上限：`room-panel`/`index.html` options、`p2p-host-room`/`collab-session`/`collab-message-handlers`、`app-session-handlers`、`protocol.md`、`routes.py` 版本 | active | 2026-11-05 |
+| inkmesh - Main | room-cap | 房间人数上限 + 私密邀请：`room-panel`/`index.html`、`p2p-host-room`/`collab-session`/`collab-message-handlers`、`app-session-handlers`、`lobby.py`、`protocol.md`、`routes.py` 版本 | done | 2026-11-05 |
 
 状态：`active`（进行中）/ `done`（本泳道收工）。子对话开场时把模板行改成真实对话名并设 `active`。
 
@@ -40,6 +40,7 @@
 | d5 | 2026-11-02 | 大厅用特色 UI（cask 战术终端提示词）。画板工作区维持高效直角 dock。他人光标和名字继续高效 UI：小圆点 + 10px 色标，不上切角和扫光。提示词在 `docs/ui/`，尚未改样式。 | `docs/ui/distinctive-ui.md`、`docs/ui/efficient-ui.md` |
 | d6 | 2026-11-03 | 长期分享：GitHub Pages 静态站 + Cloudflare Worker 信令（`packages/ink-net/signal-worker`）+ PWA/快捷方式。App 只注入 `wsUrl`/`basePath`；本机仍可用 FastAPI `/inkmesh/ws`。 | `deploy/pages/`、`scripts/export-pages.py` |
 | d7 | 2026-11-04 | 公开站信令用 Durable Object（`SignalRoom`，`idFromName(room)`）；WS 须 `?room=`。客户端 collab-session 进房时带 room / 必要时重连。 | `packages/ink-net/signal-worker/`、`collab-session.js` |
+| d8 | 2026-11-05 | 私密房：房主开关 + 本机 `inviteToken`；校验在 P2P `join`（非 Worker）；链接 `?invite=`；token 不广播；重连免校验。 | `p2p-host-room.js`、`collab-session.js`、`collab-app.js`、`room-panel.js` |
 
 ## 进展
 
@@ -62,7 +63,14 @@
 - [x] 外设「笔压 / 防抖」共用一张测试画板（`20261105c`）
 - [x] 联机设置去掉通行证开关；仅昵称（`20261105d`）
 - [x] 形状工具预览：实心/空心统一无填充实线描边（`20261105e`）
+- [x] 首页：卡片标题可改（同步 LobbyHistory + IndexedDB 首板 title）；网格加「新建画板」卡（`20261105g`）
+- [x] 右栏：标星同伴置顶区；★ 开关；标星/最近分区可折叠并本机记忆（`20261105h`）
+- [x] 昵称：最长 12（标点计 1）、常用标点白名单；客户端 `sanitizeDisplayName` + 服务端 `parse_display_name`（`20261105i`）
+- [x] 非法昵称即时提示（超长 / 非法字符）；大厅与设置（`20261105j`）
+- [x] 人数上限：下拉改为 − / 数值 / +，范围 1–16（`20261105k`）
 - [x] `player_leave` 刷新顶栏 `在线/上限`；`handleRoomMaxPlayers` 夹紧上限（`20261105f`）
+- [x] 私密房间：仅邀请链接进房；`room_private` / `join.invite`；顶栏「私密」；随机列表排除（`20261105l`）
+- [x] 私密房复查修复：peer↔player 映射、空 token 拒收、仅房主复制邀请链、拒收/断链复位加入按钮（`20261105m`）
 
 ## 关键路径
 

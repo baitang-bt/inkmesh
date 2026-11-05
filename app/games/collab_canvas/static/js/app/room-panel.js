@@ -1,9 +1,16 @@
 (function (global) {
   'use strict';
 
-  const MAX_PLAYERS_MIN = 2;
-  const MAX_PLAYERS_MAX = 30;
+  const MAX_PLAYERS_MIN = 1;
+  const MAX_PLAYERS_MAX = 16;
   const MAX_PLAYERS_DEFAULT = 8;
+
+  /** 将人数上限夹到 1–16。 */
+  function clampMaxPlayers(raw) {
+    const n = Math.floor(Number(raw));
+    if (!Number.isFinite(n)) return MAX_PLAYERS_DEFAULT;
+    return Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, n));
+  }
 
   /** Tab 键打开的房间成员面板：在线状态、延迟、房主按人权限控制。 */
   class RoomPanel {
@@ -16,15 +23,20 @@
       this.selfRttEl = this.modal && this.modal.querySelector('[data-room-self-rtt]');
       this.batchBar = this.modal && this.modal.querySelector('[data-room-batch-bar]');
       this.optionsBar = this.modal && this.modal.querySelector('[data-room-options]');
-      this.maxPlayersSelect = this.modal && this.modal.querySelector('[data-room-max-players]');
+      this.maxPlayersInput = this.modal && this.modal.querySelector('[data-room-max-players]');
+      this.maxPlayersDec = this.modal && this.modal.querySelector('[data-room-max-dec]');
+      this.maxPlayersInc = this.modal && this.modal.querySelector('[data-room-max-inc]');
+      this.privateToggle = this.modal && this.modal.querySelector('[data-room-private]');
       this.session = settings.session || null;
       this.getSelfId = settings.getSelfId || (() => '');
       this.getOwnerId = settings.getOwnerId || (() => '');
       this.players = [];
       this.maxPlayers = MAX_PLAYERS_DEFAULT;
+      this.privateRoom = false;
       this._onKick = settings.onKick || (() => {});
       this._onSetPermissions = settings.onSetPermissions || (() => {});
       this._onSetMaxPlayers = settings.onSetMaxPlayers || (() => {});
+      this._onSetPrivateRoom = settings.onSetPrivateRoom || (() => {});
 
       if (this.backdrop) {
         this.backdrop.addEventListener('click', event => {
@@ -41,33 +53,82 @@
         }
       }, true);
 
-      this._fillMaxPlayersSelect();
       this._bindBatchActions();
       this._bindMaxPlayers();
+      this._bindPrivateRoom();
+      this._syncMaxPlayersControls();
+      this._syncPrivateToggle();
     }
 
-    /** 填充人数上限下拉（2–30）。 */
-    _fillMaxPlayersSelect() {
-      if (!this.maxPlayersSelect) return;
-      this.maxPlayersSelect.innerHTML = '';
-      for (let n = MAX_PLAYERS_MIN; n <= MAX_PLAYERS_MAX; n += 1) {
-        const opt = document.createElement('option');
-        opt.value = String(n);
-        opt.textContent = String(n) + ' 人';
-        this.maxPlayersSelect.appendChild(opt);
+    /** 把当前上限同步到输入框与加减按钮状态。 */
+    _syncMaxPlayersControls() {
+      if (this.maxPlayersInput && String(this.maxPlayersInput.value) !== String(this.maxPlayers)) {
+        this.maxPlayersInput.value = String(this.maxPlayers);
       }
-      this.maxPlayersSelect.value = String(this.maxPlayers);
+      if (this.maxPlayersDec) {
+        this.maxPlayersDec.disabled = this.maxPlayersInput
+          ? this.maxPlayersInput.disabled || this.maxPlayers <= MAX_PLAYERS_MIN
+          : true;
+      }
+      if (this.maxPlayersInc) {
+        this.maxPlayersInc.disabled = this.maxPlayersInput
+          ? this.maxPlayersInput.disabled || this.maxPlayers >= MAX_PLAYERS_MAX
+          : true;
+      }
     }
 
-    /** 房主改人数上限；减员不踢人。 */
+    /**
+     * 应用人数上限并通知房主权威（减员不踢人）。
+     * @param {number|string} raw
+     * @param {boolean} [commit] 是否立即上送；输入过程中可先只夹值
+     */
+    _applyMaxPlayers(raw, commit) {
+      const next = clampMaxPlayers(raw);
+      const changed = next !== this.maxPlayers;
+      this.maxPlayers = next;
+      this._syncMaxPlayersControls();
+      if (commit && changed) this._onSetMaxPlayers(this.maxPlayers);
+      return next;
+    }
+
+    /** 房主改人数上限：加减按钮 + 数值输入。 */
     _bindMaxPlayers() {
-      if (!this.maxPlayersSelect) return;
-      this.maxPlayersSelect.addEventListener('change', () => {
-        const next = Number(this.maxPlayersSelect.value);
-        if (!Number.isFinite(next)) return;
-        this.maxPlayers = Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, Math.floor(next)));
-        this._onSetMaxPlayers(this.maxPlayers);
+      if (this.maxPlayersDec) {
+        this.maxPlayersDec.addEventListener('click', () => {
+          this._applyMaxPlayers(this.maxPlayers - 1, true);
+        });
+      }
+      if (this.maxPlayersInc) {
+        this.maxPlayersInc.addEventListener('click', () => {
+          this._applyMaxPlayers(this.maxPlayers + 1, true);
+        });
+      }
+      if (!this.maxPlayersInput) return;
+      this.maxPlayersInput.addEventListener('change', () => {
+        this._applyMaxPlayers(this.maxPlayersInput.value, true);
       });
+      this.maxPlayersInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          this.maxPlayersInput.blur();
+        }
+      });
+    }
+
+    /** 房主开关私密房间（仅邀请链接可进）。 */
+    _bindPrivateRoom() {
+      if (!this.privateToggle) return;
+      this.privateToggle.addEventListener('change', () => {
+        this._onSetPrivateRoom(Boolean(this.privateToggle.checked));
+      });
+    }
+
+    /** 同步私密开关控件。 */
+    _syncPrivateToggle() {
+      if (!this.privateToggle) return;
+      if (this.privateToggle.checked !== this.privateRoom) {
+        this.privateToggle.checked = this.privateRoom;
+      }
     }
 
     /** 房主批量开关：作用于全部房客。 */
@@ -116,10 +177,15 @@
     setMaxPlayers(maxPlayers) {
       const n = Number(maxPlayers);
       if (!Number.isFinite(n)) return;
-      this.maxPlayers = Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, Math.floor(n)));
-      if (this.maxPlayersSelect && String(this.maxPlayersSelect.value) !== String(this.maxPlayers)) {
-        this.maxPlayersSelect.value = String(this.maxPlayers);
-      }
+      this.maxPlayers = clampMaxPlayers(n);
+      this._syncMaxPlayersControls();
+      if (this.isOpen()) this.refresh();
+    }
+
+    /** 同步私密房间开关（不含邀请口令）。 */
+    setPrivateRoom(enabled) {
+      this.privateRoom = Boolean(enabled);
+      this._syncPrivateToggle();
       if (this.isOpen()) this.refresh();
     }
 
@@ -140,12 +206,10 @@
       if (this.optionsBar) {
         this.optionsBar.classList.toggle('hidden', !isHost);
       }
-      if (this.maxPlayersSelect) {
-        this.maxPlayersSelect.disabled = !isHost;
-        if (String(this.maxPlayersSelect.value) !== String(this.maxPlayers)) {
-          this.maxPlayersSelect.value = String(this.maxPlayers);
-        }
-      }
+      if (this.maxPlayersInput) this.maxPlayersInput.disabled = !isHost;
+      if (this.privateToggle) this.privateToggle.disabled = !isHost;
+      this._syncMaxPlayersControls();
+      this._syncPrivateToggle();
       if (this.batchBar) {
         this.batchBar.classList.toggle('hidden', !isHost || guestCount === 0);
       }
