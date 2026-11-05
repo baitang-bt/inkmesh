@@ -1,4 +1,5 @@
 {
   "basePath": "/inkmesh",
-  "wsUrl": "wss://inkmesh-signal.inkmesh-max.workers.dev/inkmesh/ws"
+  "wsUrl": "wss://inkmesh-signal.inkmesh-max.workers.dev/inkmesh/ws",
+  "lobbyUrl": "https://inkmesh-signal.inkmesh-max.workers.dev"
 }

@@ -6,6 +6,8 @@
   const nickname = boot.nickname || '';
   let basePath = String(boot.basePath || '/inkmesh').replace(/\/$/, '') || '/inkmesh';
   let runtimeWsUrl = '';
+  let runtimeLobbyUrl = '';
+  let lobbyAnnouncer = null;
 
   const joinScreen = document.getElementById('joinScreen');
   const roomScreen = document.getElementById('roomScreen');
@@ -25,7 +27,7 @@
   let lobbyHome = null;
   let lobbyProfile = null;
 
-  const RESERVED = { 'random-room': 1, ws: 1 };
+  const RESERVED = { 'random-room': 1, ws: 1, lobby: 1 };
   const ROOM_ID_PATTERN = /^[A-Z0-9][A-Z0-9_-]{1,7}$/;
   const ROOM_ID_MAX_LEN = 8;
   const ROOM_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -43,8 +45,66 @@
       if (data && typeof data.wsUrl === 'string' && data.wsUrl.trim()) {
         runtimeWsUrl = data.wsUrl.trim();
       }
+      if (data && typeof data.lobbyUrl === 'string' && data.lobbyUrl.trim()) {
+        runtimeLobbyUrl = data.lobbyUrl.trim().replace(/\/$/, '');
+      }
     } catch (_err) {
       // 本地 FastAPI 无 config.json 时保持同源信令。
+    }
+  }
+
+  /** 公开大厅 HTTP 基址（显式 lobbyUrl 或由 wsUrl 推导）。 */
+  function resolveLobbyUrl() {
+    if (runtimeLobbyUrl) return runtimeLobbyUrl;
+    if (runtimeWsUrl && global.LobbyAnnouncer) {
+      return LobbyAnnouncer.lobbyUrlFromWs(runtimeWsUrl);
+    }
+    return '';
+  }
+
+  /** 确保房主大厅发布器已创建。 */
+  function ensureLobbyAnnouncer() {
+    if (lobbyAnnouncer || !global.LobbyAnnouncer) return lobbyAnnouncer;
+    lobbyAnnouncer = new LobbyAnnouncer({
+      session,
+      getLobbyUrl: resolveLobbyUrl,
+      getTitle: () => {
+        const roomId = (session && session.roomId) || '';
+        if (global.LobbyHistory && roomId) {
+          const row = LobbyHistory.listRooms().find(r => r.roomId === roomId);
+          if (row && row.title) return row.title;
+        }
+        if (boardController && boardController.boardsMeta && boardController.boardsMeta.length) {
+          const active = boardController.boardsMeta.find(
+            b => b.board_id === boardController.activeBoardId
+          ) || boardController.boardsMeta[0];
+          if (active && active.title) return String(active.title);
+        }
+        return roomId;
+      },
+      capturePreview: () => (global.captureBoardPreviewBlob
+        ? captureBoardPreviewBlob(boardController)
+        : Promise.resolve(null))
+    });
+    return lobbyAnnouncer;
+  }
+
+  /** 房主进房后开始公开大厅定时上报。 */
+  function startLobbyAnnounceIfHost() {
+    if (!session || session._role !== 'host') return;
+    if (session.isPrivateRoom && session.isPrivateRoom()) return;
+    if (!resolveLobbyUrl()) return;
+    const ann = ensureLobbyAnnouncer();
+    if (ann) ann.start();
+  }
+
+  /** 下架公开大厅并停止上报。 */
+  function stopLobbyAnnounce(unpublish) {
+    if (!lobbyAnnouncer) return;
+    if (unpublish) {
+      lobbyAnnouncer.unpublishAndStop().catch(() => {});
+    } else {
+      lobbyAnnouncer.stop();
     }
   }
 
@@ -132,6 +192,7 @@
   }
 
   function showJoinScreen(message) {
+    stopLobbyAnnounce(false);
     if (joinScreen) joinScreen.classList.remove('hidden');
     if (roomScreen) roomScreen.classList.add('hidden');
     setCollabRoomScrollLock(false);
@@ -343,22 +404,33 @@
     });
   }
 
-  /** 房主退出：有房客则自动转移房主；无房客则提醒保存 .inkmesh。 */
+  /** 房主退出：无房客可先导出；有房客则解散房间（当前无房主转移）。 */
   async function leaveRoom() {
     if (boardController) {
       boardController.stopPbccAutoSave();
     }
     const isHost = boardController && boardController.isHost();
-    const guests = boardController.getPlayersSnapshot().filter(p => p.uid !== boardController.ownerId).length;
+    const guests = boardController
+      ? boardController.getPlayersSnapshot().filter(p => p.uid !== boardController.ownerId).length
+      : 0;
     if (isHost && guests === 0) {
-      // 无房客：提醒保存，离开后画板将从服务端删除。
       const wantSave = confirm('房间内没有其他成员，离开后画板会被删除。\n是否先导出 .inkmesh 保存画板？');
       if (wantSave && boardController) {
         await boardController.exportAllBoards('pbcc');
       }
     } else if (isHost && guests > 0) {
-      // 有房客：服务端会自动转移房主，先通知一下。
-      setStatus('正在离开房间，房主将转移给其他房客…');
+      const ok = confirm(
+        '房间内还有 ' + guests + ' 名成员。离开将解散房间（房客会被移出），确定离开？'
+      );
+      if (!ok) return;
+      setStatus('正在离开并解散房间…');
+    }
+    if (lobbyAnnouncer) {
+      try {
+        await lobbyAnnouncer.unpublishAndStop();
+      } catch (_err) {
+        lobbyAnnouncer.stop();
+      }
     }
     if (session.roomId) {
       session.leaveRoom();
@@ -406,7 +478,13 @@
     showJoinScreen,
     showRoomScreen,
     get maybeRestorePbccAfterJoin() { return maybeRestorePbccAfterJoin; },
-    copyRoomLink
+    copyRoomLink,
+    startLobbyAnnounceIfHost,
+    stopLobbyAnnounce,
+    scheduleLobbyAnnounce: () => {
+      const ann = ensureLobbyAnnouncer();
+      if (ann) ann.schedule();
+    }
   };
 
   session = new CollabSession({
@@ -513,7 +591,12 @@
       if (boardController.handleRoomPrivate) {
         boardController.handleRoomPrivate({ private_room: enabled });
       }
-      if (enabled) syncRoomDeepLink(session.roomId);
+      if (enabled) {
+        stopLobbyAnnounce(true);
+        syncRoomDeepLink(session.roomId);
+      } else {
+        startLobbyAnnounceIfHost();
+      }
     }
   });
 
@@ -646,23 +729,23 @@
     });
   }
 
-  const randomRoomBtn = document.getElementById('randomRoomBtn');
-  if (randomRoomBtn) {
-    randomRoomBtn.addEventListener('click', async () => {
-      try {
-        const response = await fetch(basePath + '/random-room', { headers: { Accept: 'application/json' } });
-        if (!response.ok) throw new Error('api');
-        const data = await response.json();
-        if (data.room_id) {
-          roomInput.value = data.room_id;
-          return;
-        }
-        throw new Error('api');
-      } catch (_err) {
-        roomInput.value = generateLocalRoomId();
-        setJoinStatus('已生成本地房间号');
+  /**
+   * 大厅「随机加入」回退：仅走本机 /random-room（若有）。
+   * 公开列表为空时不再误开本地空房，避免当成「加入了随机公开房」。
+   */
+  async function randomJoinFallback() {
+    try {
+      const response = await fetch(basePath + '/random-room', { headers: { Accept: 'application/json' } });
+      if (!response.ok) throw new Error('api');
+      const data = await response.json();
+      if (data.room_id) {
+        enterRoom(data.room_id);
+        return;
       }
-    });
+      throw new Error('api');
+    } catch (_err) {
+      setJoinStatus('暂无公开房间可加入');
+    }
   }
 
   const leaveRoomBtn = document.getElementById('leaveRoomBtn');
@@ -678,8 +761,10 @@
     lobbyHome = new LobbyHome({
       root: joinScreen,
       userId: selfId,
+      getLobbyUrl: resolveLobbyUrl,
       onEnterRoom: roomId => enterRoom(roomId),
-      onImportFile: () => triggerPbccImport()
+      onImportFile: () => triggerPbccImport(),
+      onRandomJoin: () => { randomJoinFallback(); }
     });
     lobbyHome.bind();
     lobbyHome.refresh();

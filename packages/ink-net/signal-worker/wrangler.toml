@@ -7,6 +7,19 @@ compatibility_date = "2024-12-01"
 name = "SIGNAL_ROOM"
 class_name = "SignalRoom"
 
+# 公开大厅目录（单例 idFromName('public')）。
+[[durable_objects.bindings]]
+name = "PUBLIC_LOBBY"
+class_name = "PublicLobby"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["SignalRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["PublicLobby"]
+
+# 可选：wrangler secret put LOBBY_HMAC
+# [vars]
+# LOBBY_HMAC = "change-me-in-production"

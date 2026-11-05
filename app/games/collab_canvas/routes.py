@@ -26,7 +26,7 @@ GAME_ID = store.GAME_ID
 APP_PATH = "/inkmesh"
 STATIC_URL = "/static/games/inkmesh"
 # 静态资源 ?v= 版本号；改 JS/CSS 后递增以便生产绕过浏览器缓存。
-COLLAB_ASSET_VERSION = "20261105m"
+COLLAB_ASSET_VERSION = "20261105o"
 
 game_info = {
     "id": GAME_ID,
@@ -85,6 +85,13 @@ async def random_room(identity=Depends(get_optional_identity)):
     if candidates:
         return {"room_id": random.choice(candidates), "created": False}
     return {"room_id": generate_random_room_id(rooms), "created": True}
+
+
+@router.get(APP_PATH + "/lobby")
+async def local_public_lobby(q: str = ""):
+    """本机无 Worker 大厅时返回空列表；公开站走信令 Worker /inkmesh/lobby。"""
+    _ = q
+    return {"rooms": []}
 
 
 @router.get(APP_PATH + "/config.json", include_in_schema=False)

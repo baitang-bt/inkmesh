@@ -1,27 +1,14 @@
 /**
  * Inkmesh P2P 信令：Worker 按 ?room= 路由到一房一 Durable Object。
- * 协议对齐 packages/ink-net/protocol.md 的 signal_*（不存笔迹）。
+ * 另提供公开大厅 HTTP（PublicLobby DO）。
  */
 
 import { DurableObject } from 'cloudflare:workers';
+import { mintLobbyToken, lobbyCorsHeaders } from './lobby-auth.js';
+import { PublicLobby } from './public-lobby.js';
+import { normalizeRoomId, roomIdOk } from './room-id.js';
 
-const MAX_ROOM_ID_LENGTH = 8;
-const RESERVED = new Set(['RANDOM-ROOM', 'WS']);
-
-/** 规范化房间号。 */
-export function normalizeRoomId(raw) {
-  return String(raw || '')
-    .trim()
-    .toUpperCase()
-    .slice(0, MAX_ROOM_ID_LENGTH);
-}
-
-/** 校验信令房间号（2–8 位，非保留段）。 */
-export function roomIdOk(roomId) {
-  if (!roomId || roomId.length < 2 || roomId.length > MAX_ROOM_ID_LENGTH) return false;
-  if (RESERVED.has(roomId)) return false;
-  return /^[A-Z0-9][A-Z0-9_-]*$/.test(roomId);
-}
+export { PublicLobby };
 
 /** 生成 peer id。 */
 function newPeerId() {
@@ -136,6 +123,27 @@ export class SignalRoom extends DurableObject {
     }
   }
 
+  /** 房主离开时从公开大厅下架。 */
+  async _unpublishLobby(roomId) {
+    const id = normalizeRoomId(roomId);
+    if (!id || !this.env.PUBLIC_LOBBY) return;
+    try {
+      const stub = this.env.PUBLIC_LOBBY.get(this.env.PUBLIC_LOBBY.idFromName('public'));
+      await stub.fetch(
+        new Request('https://inkmesh-lobby/internal/unpublish', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'X-Internal-Unpublish': '1',
+          },
+          body: JSON.stringify({ room_id: id }),
+        }),
+      );
+    } catch (_err) {
+      /* ignore lobby errors */
+    }
+  }
+
   /** 移除 peer；若是房主则清空房并通知房客。 */
   _detachPeer(peerId) {
     if (!peerId) return null;
@@ -245,7 +253,13 @@ export class SignalRoom extends DurableObject {
         sendError(ws, '房间已有房主');
         return;
       }
-      sendJson(ws, { type: 'signal_hosted', room: roomId, peer_id: peerId });
+      const lobbyToken = await mintLobbyToken(this.env, roomId, peerId);
+      sendJson(ws, {
+        type: 'signal_hosted',
+        room: roomId,
+        peer_id: peerId,
+        lobby_token: lobbyToken,
+      });
       return;
     }
 
@@ -286,7 +300,10 @@ export class SignalRoom extends DurableObject {
     this._ensureHostState();
     const meta = this._attachment(ws) || {};
     const peerId = String(meta.peerId || '');
-    this._detachPeer(peerId);
+    const result = this._detachPeer(peerId);
+    if (result && result.wasHost) {
+      await this._unpublishLobby(result.roomId);
+    }
     try {
       ws.close(code || 1000, reason || '');
     } catch (_err) {
@@ -298,24 +315,68 @@ export class SignalRoom extends DurableObject {
   async webSocketError(ws, _error) {
     this._ensureHostState();
     const meta = this._attachment(ws) || {};
-    this._detachPeer(String(meta.peerId || ''));
+    const result = this._detachPeer(String(meta.peerId || ''));
+    if (result && result.wasHost) {
+      await this._unpublishLobby(result.roomId);
+    }
   }
 }
 
-/** HTTP / WebSocket 入口：健康检查 + 按 room 转发 DO。 */
+/** 将大厅请求转发给 PublicLobby 单例 DO。 */
+function forwardLobby(request, env, pathSuffix) {
+  const stub = env.PUBLIC_LOBBY.get(env.PUBLIC_LOBBY.idFromName('public'));
+  const url = new URL(request.url);
+  url.pathname = pathSuffix;
+  return stub.fetch(new Request(url.toString(), request));
+}
+
+/** HTTP / WebSocket 入口：健康检查 + 大厅 + 按 room 转发 DO。 */
 export default {
   /**
    * @param {Request} request
-   * @param {{ SIGNAL_ROOM: DurableObjectNamespace }} env
+   * @param {{ SIGNAL_ROOM: DurableObjectNamespace, PUBLIC_LOBBY: DurableObjectNamespace, LOBBY_HMAC?: string }} env
    */
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/$/, '') || '/';
+    const method = request.method.toUpperCase();
+
+    if (method === 'OPTIONS' && path.startsWith('/inkmesh/lobby')) {
+      return new Response(null, { status: 204, headers: lobbyCorsHeaders(request) });
+    }
 
     if (path === '/' || path === '/health') {
       return new Response(
-        JSON.stringify({ ok: true, service: 'inkmesh-signal', backend: 'durable-object' }),
+        JSON.stringify({
+          ok: true,
+          service: 'inkmesh-signal',
+          backend: 'durable-object',
+          lobby: true,
+        }),
         { headers: { 'content-type': 'application/json; charset=utf-8' } },
+      );
+    }
+
+    if (path === '/inkmesh/lobby' || path === '/lobby') {
+      return forwardLobby(request, env, '/inkmesh/lobby');
+    }
+    if (path === '/inkmesh/lobby/announce' || path === '/lobby/announce') {
+      return forwardLobby(request, env, '/inkmesh/lobby/announce');
+    }
+    const previewMatch = path.match(/^\/(?:inkmesh\/)?lobby\/([^/]+)\/preview$/);
+    if (previewMatch) {
+      return forwardLobby(
+        request,
+        env,
+        `/inkmesh/lobby/${encodeURIComponent(previewMatch[1])}/preview`,
+      );
+    }
+    const deleteMatch = path.match(/^\/(?:inkmesh\/)?lobby\/([^/]+)$/);
+    if (deleteMatch && method === 'DELETE') {
+      return forwardLobby(
+        request,
+        env,
+        `/inkmesh/lobby/${encodeURIComponent(deleteMatch[1])}`,
       );
     }
 
@@ -330,9 +391,12 @@ export default {
       return stub.fetch(request);
     }
 
-    return new Response('Inkmesh signal worker. Connect WebSocket at /inkmesh/ws?room=ROOMID', {
-      status: 200,
-      headers: { 'content-type': 'text/plain; charset=utf-8' },
-    });
+    return new Response(
+      'Inkmesh signal worker. WS /inkmesh/ws?room=ROOMID · Lobby GET /inkmesh/lobby',
+      {
+        status: 200,
+        headers: { 'content-type': 'text/plain; charset=utf-8' },
+      },
+    );
   },
 };

@@ -2,12 +2,12 @@
 
 > 多 Agent / 多对话共享的项目记忆。Hub `conversations/{标题}.md` 只存指针与本场状态；**可复用的决策与进展写在此文件**。
 >
-> 最后更新：2026-11-05 20:25 +0800
+> 最后更新：2026-11-05 21:05 +0800
 
 ## 当前焦点
 
-- **任务**：私密房间（仅邀请链接进房）已落地（`20261105l`）
-- **下一步**：用户确认后推送；TURN / 公开房间发现仍未做
+- **任务**：公开大厅复查修复已落地（`20261105o`）
+- **下一步**：`wrangler deploy` 信令 Worker（含 PublicLobby 搜索/预览修复）后 Pages 生效；TURN 仍未做
 - **活跃对话**：inkmesh - Main、inkmesh UI、画板P2P独立工作区、联机连接测试、pages-share
 
 ## 活跃泳道
@@ -24,7 +24,7 @@
 | 联机连接测试 | net | `packages/ink-net/**`（不含 `signal-worker/`）、`app/games/collab_canvas/ws_handlers/**`、`room_store.py` | active | 2026-11-02 |
 | inkmesh P2P修复 | net-fix | `packages/ink-net/js/{p2p-transport,collab-session}.js`、`routes.py` 资源版本（用户指定修 1–4；不含公开发现） | done | 2026-11-02 |
 | pages-share | pages-share | `packages/ink-net/signal-worker/**`、`scripts/export-pages.py`、`deploy/pages/**`、`.github/workflows/pages.yml`、PWA（manifest/sw）、`static/js/app/{collab-app,pwa-install}.js`、`templates/index.html` 的 PWA/config 装配、`README.md` 公开访问 | active | 2026-11-03 |
-| 检查下新内容的代码并修复 | pages-review | 复查并修 pages-share：`signal-worker`、`export-pages.py`、`collab-app.js`、`routes.py` 资源版本；离房 `_updateMemberCount` | active | 2026-11-05 |
+| 检查下新内容的代码并修复 | pages-review | 复查并修 pages-share：`signal-worker`、`export-pages.py`、`collab-app.js`、`lobby-home.js`、`routes.py` 资源版本 | done | 2026-11-05 |
 | inkmesh - Main | room-cap | 房间人数上限 + 私密邀请：`room-panel`/`index.html`、`p2p-host-room`/`collab-session`/`collab-message-handlers`、`app-session-handlers`、`lobby.py`、`protocol.md`、`routes.py` 版本 | done | 2026-11-05 |
 
 状态：`active`（进行中）/ `done`（本泳道收工）。子对话开场时把模板行改成真实对话名并设 `active`。
@@ -71,6 +71,8 @@
 - [x] `player_leave` 刷新顶栏 `在线/上限`；`handleRoomMaxPlayers` 夹紧上限（`20261105f`）
 - [x] 私密房间：仅邀请链接进房；`room_private` / `join.invite`；顶栏「私密」；随机列表排除（`20261105l`）
 - [x] 私密房复查修复：peer↔player 映射、空 token 拒收、仅房主复制邀请链、拒收/断链复位加入按钮（`20261105m`）
+- [x] 公开大厅：Worker `PublicLobby` + 房主 5min 缩略图；左栏大厅搜索/随机；顶栏删随机（`20261105n`）
+- [x] 公开大厅复查（`20261105o`）：离开文案改解散（无假转移房主）；空大厅随机不误开本地房；搜索 SQL 过滤；预览超限仍上架元数据；随机加入拉全量列表
 
 ## 关键路径
 
@@ -85,7 +87,7 @@
 ## 阻塞 / 未决
 
 - **阻塞**：无
-- **未决问题**：公开房间发现（局域网 / DHT）；大厅何时按特色提示词改样式
+- **未决问题**：局域网 / DHT 发现；大厅何时按特色提示词改样式
 
 ## 专题文档
 

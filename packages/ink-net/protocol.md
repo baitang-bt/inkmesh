@@ -36,10 +36,25 @@
 | `signal_join` | C→S | `room`；无房主则回 `signal_no_host` |
 | `signal_no_host` | S→C | 可转 `signal_host` |
 | `signal_host` | C→S | 登记为该房间房主 |
-| `signal_hosted` | S→C | 登记成功 |
+| `signal_hosted` | S→C | 登记成功；可含 `lobby_token`（公开大厅 announce HMAC） |
 | `signal_peer` | S→C | 房客：`host_id` |
 | `signal_offer` / `signal_answer` / `signal_ice` | 双向经 S | `to_id`、`from_id`、`sdp` 或 `candidate` |
 | `signal_host_gone` | S→C | 房主断开 |
+
+### 公开大厅（信令 Worker HTTP）
+
+同源 Worker（`lobbyUrl`，可由 `wsUrl` 推导）：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/inkmesh/lobby?q=` | 公开房间列表：`rooms[{ room_id, title, player_count, updated_at, has_preview }]` |
+| `GET` | `/inkmesh/lobby/{roomId}/preview` | JPEG/PNG 预览图 |
+| `POST` | `/inkmesh/lobby/announce` | 房主上报；`FormData`：`room_id`/`title`/`player_count`/`preview`；头 `X-Lobby-Token` |
+| `DELETE` | `/inkmesh/lobby/{roomId}` | 下架；头 `X-Lobby-Token` |
+
+- 仅非私密房上榜；开私密或房主离开即下架。
+- 客户端约每 **5 分钟**（及人数/标题变化）上传缩略图。
+- 大厅 UI：左栏「大厅」可搜索；「随机加入」从列表挑房。
 
 ## 房间状态（房主权威）
 

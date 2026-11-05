@@ -28,7 +28,7 @@
   }
 
   /**
-   * 进站三栏大厅：本机画板 / 最近房间 + 最近同房的人。
+   * 进站大厅：我的画板 / 最近 / 公开大厅 + 最近同房的人。
    * 点击与新建只通过回调进入现有 enterRoom。
    */
   class LobbyHome {
@@ -38,8 +38,13 @@
       this.userId = String(settings.userId || '');
       this.onEnterRoom = settings.onEnterRoom || (() => {});
       this.onImportFile = settings.onImportFile || (() => {});
+      this.getLobbyUrl = settings.getLobbyUrl || (() => '');
+      this.onRandomJoin = settings.onRandomJoin || (() => {});
       this.view = 'boards';
       this._bound = false;
+      this._hallRooms = [];
+      this._hallQuery = '';
+      this._hallSearchTimer = null;
 
       this.titleEl = document.getElementById('lobbyTitle');
       this.gridEl = document.getElementById('lobbyBoardGrid');
@@ -52,6 +57,8 @@
       this.newBtn = document.getElementById('lobbyNewBoardBtn');
       this.emptyNewBtn = document.getElementById('lobbyEmptyNewBtn');
       this.emptyImportBtn = document.getElementById('lobbyEmptyImportBtn');
+      this.hallSearchEl = document.getElementById('lobbyHallSearch');
+      this.hallRandomBtn = document.getElementById('lobbyHallRandomBtn');
     }
 
     /** 绑定导航与工具条事件（只绑一次）。 */
@@ -68,6 +75,19 @@
       if (this.emptyImportBtn) {
         this.emptyImportBtn.addEventListener('click', () => this.onImportFile());
       }
+      if (this.hallRandomBtn) {
+        this.hallRandomBtn.addEventListener('click', () => this.randomJoinHall());
+      }
+      if (this.hallSearchEl) {
+        this.hallSearchEl.addEventListener('input', () => {
+          this._hallQuery = String(this.hallSearchEl.value || '').trim();
+          if (this._hallSearchTimer) clearTimeout(this._hallSearchTimer);
+          this._hallSearchTimer = setTimeout(() => {
+            this._hallSearchTimer = null;
+            if (this.view === 'hall') this.refresh();
+          }, 280);
+        });
+      }
       if (this.gridEl) {
         this.gridEl.addEventListener('click', event => {
           if (event.target.closest('[data-lobby-create]')) {
@@ -82,6 +102,7 @@
         });
       }
       this._bindPeerSections();
+      this._syncChrome();
     }
 
     /** 绑定标星 / 最近分区折叠与星标按钮。 */
@@ -125,18 +146,115 @@
       if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
 
-    /** 切换「我的画板 / 最近」并刷新列表。 */
+    /** 切换「我的画板 / 最近 / 大厅」并刷新列表。 */
     setView(view) {
-      this.view = view === 'recent' ? 'recent' : 'boards';
+      const raw = String(view || 'boards');
+      this.view = raw === 'recent' || raw === 'hall' ? raw : 'boards';
       this.root.querySelectorAll('[data-lobby-view]').forEach(btn => {
         const active = btn.getAttribute('data-lobby-view') === this.view;
         btn.classList.toggle('is-active', active);
         btn.setAttribute('aria-selected', active ? 'true' : 'false');
       });
       if (this.titleEl) {
-        this.titleEl.textContent = this.view === 'recent' ? '最近' : '我的画板';
+        this.titleEl.textContent = this.view === 'recent'
+          ? '最近'
+          : (this.view === 'hall' ? '大厅' : '我的画板');
       }
+      this._syncChrome();
       this.refresh();
+    }
+
+    /** 按当前视图显示本地工具或大厅搜索/随机。 */
+    _syncChrome() {
+      if (!this.root) return;
+      const hall = this.view === 'hall';
+      this.root.querySelectorAll('[data-lobby-local-tools]').forEach(el => {
+        el.classList.toggle('hidden', hall);
+      });
+      this.root.querySelectorAll('[data-lobby-hall-tools]').forEach(el => {
+        el.classList.toggle('hidden', !hall);
+      });
+    }
+
+    /** 拉取公开大厅房间列表。 */
+    async _fetchHallRooms() {
+      const base = String(this.getLobbyUrl() || '').replace(/\/$/, '');
+      if (!base) {
+        this._hallRooms = [];
+        return [];
+      }
+      const q = encodeURIComponent(this._hallQuery || '');
+      const url = base + '/inkmesh/lobby' + (q ? ('?q=' + q) : '');
+      try {
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error('lobby http ' + res.status);
+        const data = await res.json();
+        const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+        this._hallRooms = rooms.map(row => ({
+          roomId: String(row.room_id || '').toUpperCase(),
+          title: String(row.title || row.room_id || '').slice(0, 40),
+          playerCount: Math.max(1, Number(row.player_count) || 1),
+          updatedAt: Number(row.updated_at) || 0,
+          hasPreview: Boolean(row.has_preview)
+        })).filter(r => r.roomId);
+        return this._hallRooms;
+      } catch (_err) {
+        this._hallRooms = [];
+        return [];
+      }
+    }
+
+    /**
+     * 构建公开大厅卡片（预览 / 标题 / 人数）。
+     * @param {{roomId:string,title:string,playerCount:number,updatedAt:number,hasPreview:boolean}} room
+     */
+    _buildHallCard(room) {
+      const root = document.createElement('div');
+      root.className = 'lobby-board-card lobby-board-card--hall';
+      root.setAttribute('data-room-id', room.roomId);
+      root.setAttribute('role', 'button');
+      root.tabIndex = 0;
+      const base = String(this.getLobbyUrl() || '').replace(/\/$/, '');
+      const previewUrl = room.hasPreview && base
+        ? (base + '/inkmesh/lobby/' + encodeURIComponent(room.roomId)
+          + '/preview?t=' + encodeURIComponent(String(room.updatedAt || 0)))
+        : '';
+      root.innerHTML =
+        `<div class="lobby-board-thumb lobby-board-thumb--preview">` +
+        (previewUrl
+          ? `<img alt="" loading="lazy" src="${previewUrl}">`
+          : `<span>公开</span>`) +
+        `</div>` +
+        `<div class="lobby-board-body">` +
+        `<div class="lobby-board-title"></div>` +
+        `<div class="lobby-board-meta"></div>` +
+        `</div>`;
+      root.querySelector('.lobby-board-title').textContent = room.title || room.roomId;
+      root.querySelector('.lobby-board-meta').textContent =
+        `${room.roomId} · ${room.playerCount} 人`;
+      return root;
+    }
+
+    /**
+     * 随机进公开房：拉全量列表（不受搜索框过滤），空则回退 onRandomJoin。
+     */
+    async randomJoinHall() {
+      const prevQ = this._hallQuery;
+      this._hallQuery = '';
+      let list = [];
+      try {
+        list = await this._fetchHallRooms();
+      } finally {
+        this._hallQuery = prevQ;
+      }
+      if (list.length) {
+        const pick = list[Math.floor(Math.random() * list.length)];
+        if (pick && pick.roomId) {
+          this.onEnterRoom(pick.roomId);
+          return;
+        }
+      }
+      this.onRandomJoin();
     }
 
     /** 生成非 P 开头的 8 位大写字母+数字房间号。 */
@@ -301,14 +419,53 @@
     /** 刷新中栏卡片与右栏同伴列表。 */
     async refresh() {
       if (!this.gridEl) return;
+      this.gridEl.innerHTML = '';
+
+      if (this.view === 'hall') {
+        const rooms = await this._fetchHallRooms();
+        if (!rooms.length) {
+          if (this.emptyEl) {
+            this.emptyEl.classList.remove('hidden');
+            const title = this.emptyEl.querySelector('.lobby-empty-title');
+            const hint = this.emptyEl.querySelector('.lobby-empty-hint');
+            const actions = this.emptyEl.querySelector('.lobby-empty-actions');
+            if (title) title.textContent = this.getLobbyUrl() ? '暂无公开房间' : '大厅未配置';
+            if (hint) {
+              hint.textContent = this.getLobbyUrl()
+                ? '房主开启公开房间后会出现在这里；也可点「随机加入」。'
+                : '公开站需配置 lobbyUrl / wsUrl（信令 Worker）后才能浏览大厅。';
+            }
+            if (actions) actions.classList.add('hidden');
+          }
+        } else {
+          if (this.emptyEl) {
+            this.emptyEl.classList.add('hidden');
+            const actions = this.emptyEl.querySelector('.lobby-empty-actions');
+            if (actions) actions.classList.remove('hidden');
+          }
+          rooms.forEach(room => this.gridEl.appendChild(this._buildHallCard(room)));
+        }
+        this._renderPeers();
+        return;
+      }
+
       const cards = await this._collectCards();
       const shown = this.view === 'recent' ? cards.slice(0, 20) : cards;
-      this.gridEl.innerHTML = '';
       if (this.view === 'boards') {
         this.gridEl.appendChild(this._buildCreateCard());
       }
       if (!shown.length) {
-        if (this.emptyEl) this.emptyEl.classList.remove('hidden');
+        if (this.emptyEl) {
+          this.emptyEl.classList.remove('hidden');
+          const title = this.emptyEl.querySelector('.lobby-empty-title');
+          const hint = this.emptyEl.querySelector('.lobby-empty-hint');
+          const actions = this.emptyEl.querySelector('.lobby-empty-actions');
+          if (title) title.textContent = '还没有画板';
+          if (hint) {
+            hint.textContent = '新建一个房间开始画，或导入 .inkmesh / .pbcc。进出过的房间会出现在这里。';
+          }
+          if (actions) actions.classList.remove('hidden');
+        }
       } else {
         if (this.emptyEl) this.emptyEl.classList.add('hidden');
         shown.forEach(card => {

@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 
 GAME_ID = "collab_canvas"
 
-RESERVED_SEGMENTS = frozenset({"random-room", "ws"})
+RESERVED_SEGMENTS = frozenset({"random-room", "ws", "lobby"})
 
 rooms: Dict[str, Dict] = {}
 player_rooms: Dict[str, str] = {}

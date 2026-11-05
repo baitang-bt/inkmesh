@@ -54,6 +54,8 @@
       this._peerIdByPlayer = new Map();
       /** 房客侧已同步的私密状态（不含口令） */
       this._privateRoom = false;
+      /** 公开大厅 announce 口令（signal_hosted 下发，仅房主） */
+      this._lobbyToken = '';
     }
 
     /** 将信令 peer 解析为成员表用的 playerId。 */
@@ -234,6 +236,7 @@
         return;
       }
       if (type === 'signal_hosted') {
+        this._lobbyToken = String(data.lobby_token || '');
         this._onHosted(String(data.room || ''));
         return;
       }
@@ -794,6 +797,7 @@
       this.roomId = '';
       this._role = '';
       this._privateRoom = false;
+      this._lobbyToken = '';
       this._pendingJoin = null;
       this._pendingInvite = '';
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -934,6 +938,8 @@
       this._inRoom = false;
       this.roomId = '';
       this._role = '';
+      this._privateRoom = false;
+      this._lobbyToken = '';
       this._pendingJoin = null;
       this.connected = false;
     }
@@ -983,6 +989,24 @@
     isPrivateRoom() {
       if (this._hostRoom) return Boolean(this._hostRoom.privateRoom);
       return Boolean(this._privateRoom);
+    }
+
+    /**
+     * 公开大厅发布上下文（仅房主有 token）。
+     * @returns {{roomId:string,token:string,privateRoom:boolean,playerCount:number,isHost:boolean}}
+     */
+    getLobbyAnnounceContext() {
+      const isHost = this._role === 'host' && Boolean(this._hostRoom);
+      const playerCount = isHost
+        ? this._hostRoom.listPlayers().filter(p => p.connected !== false).length
+        : 0;
+      return {
+        roomId: this.roomId || '',
+        token: isHost ? (this._lobbyToken || '') : '',
+        privateRoom: this.isPrivateRoom(),
+        playerCount: Math.max(1, playerCount || 1),
+        isHost
+      };
     }
 
     /** 房主：踢出指定玩家。 */

@@ -35,6 +35,10 @@
             <span class="material-symbols-outlined" aria-hidden="true">history</span>
             最近
           </button>
+          <button type="button" class="lobby-nav-item" data-lobby-view="hall" role="tab" aria-selected="false">
+            <span class="material-symbols-outlined" aria-hidden="true">meeting_room</span>
+            大厅
+          </button>
         </nav>
       </aside>
 
@@ -42,19 +46,23 @@
         <header class="lobby-main-header">
           <h1 id="lobbyTitle">我的画板</h1>
           <div class="lobby-toolbar">
-            <div class="lobby-join-row">
+            <div class="lobby-join-row" data-lobby-local-tools>
               <label class="lobby-sr-only" for="roomInput">房间号</label>
               <input id="roomInput" type="text" maxlength="8" placeholder="房间号" value="{{ initial_room }}" autocomplete="off">
               <button type="button" id="joinBtn" class="btn">进入</button>
-              <button type="button" id="randomRoomBtn" class="btn" title="随机加入可进入的房间">随机</button>
             </div>
-            <button type="button" id="openPbccBtn" class="btn">导入</button>
+            <div class="lobby-hall-tools hidden" data-lobby-hall-tools>
+              <label class="lobby-sr-only" for="lobbyHallSearch">搜索公开大厅</label>
+              <input id="lobbyHallSearch" type="search" maxlength="40" placeholder="搜索房间号或标题" autocomplete="off">
+              <button type="button" id="lobbyHallRandomBtn" class="btn" title="随机加入公开大厅">随机加入</button>
+            </div>
+            <button type="button" id="openPbccBtn" class="btn" data-lobby-local-tools>导入</button>
             <button type="button" id="pwaInstallBtn" class="btn" title="安装应用或下载网址快捷方式">安装 / 快捷方式</button>
-            <button type="button" id="lobbyNewBoardBtn" class="btn lobby-btn-primary">新建画板</button>
+            <button type="button" id="lobbyNewBoardBtn" class="btn lobby-btn-primary" data-lobby-local-tools>新建画板</button>
             <input type="file" id="openPbccInput" class="join-pbcc-input" accept=".inkmesh,.pbcc,application/json" hidden>
           </div>
         </header>
-        <div class="lobby-main-meta">
+        <div class="lobby-main-meta" data-lobby-local-tools>
           <label class="join-restore-row lobby-restore">
             <input type="checkbox" id="restoreLastBoard" checked>
             <span>进入时恢复本机上次画板（仅房主）</span>
@@ -529,6 +537,7 @@
   <script src="{{ net('js/p2p-transport.js') }}"></script>
   <script src="{{ net('js/p2p-host-room.js') }}"></script>
   <script src="{{ net('js/collab-session.js') }}"></script>
+  <script src="{{ net('js/lobby-announce.js') }}"></script>
   <script src="{{ cc('js/app/collab-fullscreen.js') }}"></script>
   <script src="{{ eng('js/board/ui/canvas-watermark.js') }}"></script>
   <script src="{{ cc('js/app/room-panel.js') }}"></script>

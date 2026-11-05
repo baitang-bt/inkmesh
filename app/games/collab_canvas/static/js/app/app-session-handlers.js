@@ -90,6 +90,7 @@
         const copyBtn = document.getElementById('copyLinkBtn');
         if (copyBtn) copyBtn.onclick = () => ctx.copyRoomLink();
         ctx.maybeRestorePbccAfterJoin(data);
+        if (ctx.startLobbyAnnounceIfHost) ctx.startLobbyAnnounceIfHost();
       },
       drawing_sync: data => ctx.boardController.handleDrawingSync(data),
       draw: data => ctx.boardController.handleDrawMessage(data),
@@ -156,6 +157,11 @@
         if (ctx.roomPanel && data.private_room != null) {
           ctx.roomPanel.setPrivateRoom(data.private_room);
         }
+        if (data.private_room) {
+          if (ctx.stopLobbyAnnounce) ctx.stopLobbyAnnounce(true);
+        } else if (ctx.startLobbyAnnounceIfHost) {
+          ctx.startLobbyAnnounceIfHost();
+        }
       },
       player_join: data => {
         ctx.cursorOverlay.setPlayerStyle(data.player_id, data);
@@ -187,6 +193,7 @@
           );
         }
         ctx.setStatus(`${data.name} 加入了房间`);
+        if (ctx.scheduleLobbyAnnounce) ctx.scheduleLobbyAnnounce();
       },
       player_leave: data => {
         if (!data.temporary) ctx.cursorOverlay.remove(data.player_id);
@@ -203,6 +210,7 @@
         }
         if (ctx.boardPanel) ctx.boardPanel.refreshOccupantTree();
         if (data.message) ctx.setStatus(data.message);
+        if (ctx.scheduleLobbyAnnounce) ctx.scheduleLobbyAnnounce();
       }
     
     };
