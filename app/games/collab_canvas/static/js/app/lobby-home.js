@@ -451,10 +451,8 @@
 
       const cards = await this._collectCards();
       const shown = this.view === 'recent' ? cards.slice(0, 20) : cards;
-      if (this.view === 'boards') {
-        this.gridEl.appendChild(this._buildCreateCard());
-      }
       if (!shown.length) {
+        // 空列表只用居中空态按钮；有画板时才在网格里放「新建」卡片。
         if (this.emptyEl) {
           this.emptyEl.classList.remove('hidden');
           const title = this.emptyEl.querySelector('.lobby-empty-title');
@@ -468,6 +466,9 @@
         }
       } else {
         if (this.emptyEl) this.emptyEl.classList.add('hidden');
+        if (this.view === 'boards') {
+          this.gridEl.appendChild(this._buildCreateCard());
+        }
         shown.forEach(card => {
           this.gridEl.appendChild(this._buildBoardCard(card));
         });

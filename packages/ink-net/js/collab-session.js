@@ -3,6 +3,11 @@
 
   const CURSOR_HZ = 15;
   const ROOM_ID_MAX_LEN = 8;
+  /** 带邀请进房时 signal_no_host 最多再试几次 join，避免抢成第二房主。 */
+  const INVITE_NO_HOST_RETRIES = 3;
+  const INVITE_NO_HOST_RETRY_MS = 500;
+  /** 房客发出 offer 后等待数据通道打开的上限。 */
+  const GUEST_P2P_TIMEOUT_MS = 10000;
 
   /** 规范化房间号。 */
   function normalizeRoomId(roomId) {
@@ -23,6 +28,8 @@
       this.getRoomSnapshot = settings.getRoomSnapshot || null;
       this.runHostAuthority = settings.runHostAuthority || null;
       this.handlers = settings.handlers || {};
+      /** 可选 ICE/TURN 列表（来自 config.json iceServers）。 */
+      this.iceServers = Array.isArray(settings.iceServers) ? settings.iceServers : null;
       this.ws = null;
       this.roomId = '';
       this.connected = false;
@@ -56,6 +63,58 @@
       this._privateRoom = false;
       /** 公开大厅 announce 口令（signal_hosted 下发，仅房主） */
       this._lobbyToken = '';
+      this._noHostRetryCount = 0;
+      this._noHostRetryTimer = null;
+      this._guestP2pTimer = null;
+    }
+
+    /** 供 createPeerLink 使用的 ICE 服务器列表。 */
+    _iceServersForPeer() {
+      if (Array.isArray(this.iceServers) && this.iceServers.length) {
+        return this.iceServers;
+      }
+      return (global.P2pTransport && global.P2pTransport.DEFAULT_ICE) || undefined;
+    }
+
+    /** 清除邀请进房时的无房主重试定时器。 */
+    _clearNoHostRetry() {
+      if (this._noHostRetryTimer) {
+        clearTimeout(this._noHostRetryTimer);
+        this._noHostRetryTimer = null;
+      }
+      this._noHostRetryCount = 0;
+    }
+
+    /** 清除房客 P2P 建连超时定时器。 */
+    _clearGuestP2pTimer() {
+      if (this._guestP2pTimer) {
+        clearTimeout(this._guestP2pTimer);
+        this._guestP2pTimer = null;
+      }
+    }
+
+    /**
+     * 带邀请时无房主：短延迟再 signal_join；用尽次数后才占主（兼容房主刷新深链）。
+     * @param {string} roomId
+     */
+    _onSignalNoHost(roomId) {
+      const target = normalizeRoomId(roomId || (this._pendingJoin && this._pendingJoin.room));
+      if (!target) return;
+      const invite = (this._pendingJoin && this._pendingJoin.invite) || this._pendingInvite || '';
+      if (invite && this._noHostRetryCount < INVITE_NO_HOST_RETRIES) {
+        this._noHostRetryCount += 1;
+        if (this._noHostRetryTimer) clearTimeout(this._noHostRetryTimer);
+        this._noHostRetryTimer = setTimeout(() => {
+          this._noHostRetryTimer = null;
+          if (this._intentionalLeave || this._hostGone) return;
+          if (this._role === 'host' || this._role === 'guest') return;
+          if (!this._pendingJoin || normalizeRoomId(this._pendingJoin.room) !== target) return;
+          this._sendSignal({ type: 'signal_join', room: target });
+        }, INVITE_NO_HOST_RETRY_MS);
+        return;
+      }
+      this._clearNoHostRetry();
+      this._claimHost(target);
     }
 
     /** 将信令 peer 解析为成员表用的 playerId。 */
@@ -232,15 +291,17 @@
         return;
       }
       if (type === 'signal_no_host') {
-        this._claimHost(String(data.room || ''));
+        this._onSignalNoHost(String(data.room || ''));
         return;
       }
       if (type === 'signal_hosted') {
+        this._clearNoHostRetry();
         this._lobbyToken = String(data.lobby_token || '');
         this._onHosted(String(data.room || ''));
         return;
       }
       if (type === 'signal_peer') {
+        this._clearNoHostRetry();
         this._connectAsGuest(String(data.room || ''), String(data.host_id || ''));
         return;
       }
@@ -428,6 +489,8 @@
      */
     joinRoom(roomId, options) {
       this._clearReconnectTimer();
+      this._clearNoHostRetry();
+      this._clearGuestP2pTimer();
       this._intentionalLeave = false;
       this._hostGone = false;
       const target = normalizeRoomId(roomId);
@@ -499,10 +562,12 @@
       this._role = 'guest';
       this.roomId = target;
       this._hostPeerId = hostId;
+      this._clearGuestP2pTimer();
       this._teardownGuestLinkOnly();
       const link = global.P2pTransport.createPeerLink({
         createDataChannel: true,
         remotePeerId: hostId,
+        iceServers: this._iceServersForPeer(),
         onMessage: data => this._onDataMessage(data, { asHost: false }),
         onOpen: () => this._onGuestChannelOpen(),
         onClose: () => this._onGuestChannelClose(),
@@ -524,14 +589,38 @@
           to_id: hostId,
           sdp
         });
+        this._guestP2pTimer = setTimeout(() => {
+          this._guestP2pTimer = null;
+          this._failGuestP2pConnect();
+        }, GUEST_P2P_TIMEOUT_MS);
       } catch (err) {
         this.lastError = (err && err.message) || '无法建立 P2P 连接';
         this._emit('error', { message: this.lastError });
       }
     }
 
+    /**
+     * 房客 P2P 超时：拆链路回大厅，绝不因此占成房主。
+     */
+    _failGuestP2pConnect() {
+      if (this._role !== 'guest' || this._inRoom || this._intentionalLeave || this._hostGone) return;
+      const dcOpen = this._hostLink && this._hostLink.dc && this._hostLink.dc.readyState === 'open';
+      if (dcOpen) return;
+      this.lastError = '无法连上房主（网络限制），请重试或在 config.json 配置 TURN（iceServers）';
+      this._teardownGuestLinkOnly();
+      this._role = '';
+      this.roomId = '';
+      this._hostPeerId = '';
+      this._pendingJoin = null;
+      this._dispatch({
+        type: 'room_removed',
+        message: this.lastError
+      });
+    }
+
     /** 房客数据通道打开后发送 join（私密房附带 invite）。 */
     _onGuestChannelOpen() {
+      this._clearGuestP2pTimer();
       const displayName = this.getDisplayName ? this.getDisplayName() : this.nickname;
       const invite = (this._pendingJoin && this._pendingJoin.invite) || this._pendingInvite || '';
       global.P2pTransport.sendOnLink(this._hostLink, {
@@ -566,6 +655,8 @@
       this._hostGone = true;
       this._intentionalLeave = true;
       this._clearReconnectTimer();
+      this._clearNoHostRetry();
+      this._clearGuestP2pTimer();
       this.lastError = message || '房主已离开房间';
       this._teardownMedia();
       this._inRoom = false;
@@ -589,6 +680,7 @@
       const link = global.P2pTransport.createPeerLink({
         createDataChannel: false,
         remotePeerId: fromId,
+        iceServers: this._iceServersForPeer(),
         onMessage: msg => this._onDataMessage(msg, { asHost: true, peerId: fromId }),
         onOpen: () => {},
         onClose: () => this._onGuestPeerClosed(fromId),
@@ -782,6 +874,8 @@
     leaveRoom() {
       this._intentionalLeave = true;
       this._clearReconnectTimer();
+      this._clearNoHostRetry();
+      this._clearGuestP2pTimer();
       if (this._role === 'guest') {
         this.send({ type: 'leave_room' });
       }
@@ -910,6 +1004,8 @@
       const handler = this.handlers[type] || this.handlers['*'];
       if (handler) handler(data);
       if (type === 'room_state' && data.room_id) {
+        this._clearGuestP2pTimer();
+        this._clearNoHostRetry();
         this.roomId = data.room_id;
         this._inRoom = true;
         this._pendingJoin = null;
@@ -929,6 +1025,8 @@
 
     disconnect() {
       this._clearReconnectTimer();
+      this._clearNoHostRetry();
+      this._clearGuestP2pTimer();
       this._intentionalLeave = true;
       this._teardownMedia();
       if (this.ws) {

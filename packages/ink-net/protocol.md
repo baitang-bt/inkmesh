@@ -28,13 +28,15 @@
 
 房主浏览器是房间权威；房客只连房主。
 
+ICE：客户端默认公共 STUN；跨运营商需在 `deploy/pages/config.json` 的 `iceServers` 增加自备 TURN（含 `urls` / `username` / `credential`）。
+
 ### 信令消息
 
 | type | 方向 | 说明 |
 |------|------|------|
 | `signal_hello` | S→C | `peer_id` |
 | `signal_join` | C→S | `room`；无房主则回 `signal_no_host` |
-| `signal_no_host` | S→C | 可转 `signal_host` |
+| `signal_no_host` | S→C | 无邀请时转 `signal_host`；带 `?invite=` 进房时客户端先短重试 join 再占主 |
 | `signal_host` | C→S | 登记为该房间房主 |
 | `signal_hosted` | S→C | 登记成功；可含 `lobby_token`（公开大厅 announce HMAC） |
 | `signal_peer` | S→C | 房客：`host_id` |

@@ -2,12 +2,12 @@
 
 > 多 Agent / 多对话共享的项目记忆。Hub `conversations/{标题}.md` 只存指针与本场状态；**可复用的决策与进展写在此文件**。
 >
-> 最后更新：2026-11-05 21:05 +0800
+> 最后更新：2026-11-06 21:40 +0800
 
 ## 当前焦点
 
-- **任务**：公开站迁 Cloudflare Worker Assets（与信令同源，`20261105q`）
-- **下一步**：配置 GitHub `CLOUDFLARE_*` Secrets；自定义域名（大陆）；TURN 仍未做
+- **任务**：邀请链接双房主修复（`20261107a`）
+- **下一步**：push Pages；跨网自备 TURN 写入 `config.json` iceServers
 - **活跃对话**：inkmesh - Main、inkmesh UI、画板P2P独立工作区、联机连接测试、pages-share
 
 ## 活跃泳道
@@ -39,7 +39,8 @@
 | d4 | 2026-11-02 | 同仓双包：`packages/ink-engine`（画笔）与 `packages/ink-net`（联机 JS + protocol.md）。App 只装配。服务端 WS 暂不拆包（待 P2P）。无 bundler，StaticFiles 挂 `/static/packages/*`。契约见各包 `CONTRACT.md`。 | `packages/*`、`docs/CODE_STRUCTURE.md` |
 | d5 | 2026-11-02 | 大厅用特色 UI（cask 战术终端提示词）。画板工作区维持高效直角 dock。他人光标和名字继续高效 UI：小圆点 + 10px 色标，不上切角和扫光。提示词在 `docs/ui/`，尚未改样式。 | `docs/ui/distinctive-ui.md`、`docs/ui/efficient-ui.md` |
 | d6 | 2026-11-03 | 长期分享：先 GitHub Pages + CF Worker 信令；后改为 **同一 Worker 托管静态 Assets + 信令 + 大厅**（`signal-worker`）。App 只注入 `wsUrl`/`basePath`/`lobbyUrl`；本机仍 FastAPI。 | `signal-worker/`、`export-pages.py`、`deploy-cloudflare.yml` |
-| d9 | 2026-11-05 | 公开入口离开 github.io，默认 `*.workers.dev/inkmesh/`；大陆再绑自定义域名。 | `deploy-cloudflare.yml` |
+| d9 | 2026-11-05 | （已由 d10 取代）曾改默认入口为 `*.workers.dev/inkmesh/`。 | `deploy-cloudflare.yml` |
+| d10 | 2026-11-06 | 公开静态站改回 **GitHub Pages**（`baitang-bt.github.io/inkmesh`）；CF Worker 主职信令+大厅；`pages.yml` 随 push main；`deploy-cloudflare.yml` 仅手动。 | `pages.yml`、`deploy/pages/config.json`、`README.md` |
 | d7 | 2026-11-04 | 公开站信令用 Durable Object（`SignalRoom`，`idFromName(room)`）；WS 须 `?room=`。客户端 collab-session 进房时带 room / 必要时重连。 | `packages/ink-net/signal-worker/`、`collab-session.js` |
 | d8 | 2026-11-05 | 私密房：房主开关 + 本机 `inviteToken`；校验在 P2P `join`（非 Worker）；链接 `?invite=`；token 不广播；重连免校验。 | `p2p-host-room.js`、`collab-session.js`、`collab-app.js`、`room-panel.js` |
 
@@ -106,5 +107,5 @@
 - 画笔泳道已 done：后续手测半透明叠笔、点按、抬笔卡顿、旧房间无 points 笔画。
 - 联机：P2P 已接。信令 `signal_store` / `signal_msgs`；客户端 `p2p-transport` + `p2p-host-room` + `CollabSession`。`player_join` 已补 `_updateMemberCount`。TURN 与 DHT 发现未做。
 - P2P 修复（`20261102f`）：ICE 候选队列；忽略 `disconnected`；房主离开先 `room_removed` + 取消房客误重连；数据通道侧强制 `can_draw`。
-- 公开站：Worker 已 DO；`config.json` 基址 `wss://inkmesh-signal.inkmesh-max.workers.dev/inkmesh/ws`；客户端自动加 `?room=`。
+- 公开站：静态 → GitHub Pages；信令/大厅 → Worker DO；`config.json` 基址 `wss://inkmesh-signal.inkmesh-max.workers.dev/inkmesh/ws`；客户端自动加 `?room=`。
 - 改静态资源后递增 `routes.py` 的 `COLLAB_ASSET_VERSION`。

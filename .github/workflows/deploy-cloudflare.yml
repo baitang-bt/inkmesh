@@ -1,8 +1,8 @@
-name: Deploy Cloudflare
+name: Deploy Cloudflare Worker
 
+# 信令 + 公开大厅 Worker；静态站默认走 GitHub Pages。
+# 手动触发时可顺带同步 Assets（workers.dev/inkmesh/ 镜像，非主入口）。
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -34,7 +34,7 @@ jobs:
       - name: Sync into Worker public assets
         run: bash scripts/sync-worker-public.sh
 
-      - name: Deploy Worker (static + signal + lobby)
+      - name: Deploy Worker (signal + lobby + optional assets mirror)
         working-directory: packages/ink-net/signal-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

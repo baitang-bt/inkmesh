@@ -124,9 +124,10 @@
 
 | 路径 | 一句话 |
 |------|--------|
-| `packages/ink-net/signal-worker/` | Cloudflare Worker，同 `signal_*` 协议 |
+| `packages/ink-net/signal-worker/` | Cloudflare Worker：信令 + 大厅（可选静态镜像） |
 | `scripts/export-pages.py` | 导出 `dist/pages` 给 GitHub Pages |
-| `deploy/pages/config.json` | `basePath` + `wsUrl`（指向 Worker） |
+| `deploy/pages/config.json` | `basePath` + `wsUrl` / `lobbyUrl` + 可选 `iceServers` |
+| `.github/workflows/pages.yml` | push `main` → github.io |
 
 ---
 

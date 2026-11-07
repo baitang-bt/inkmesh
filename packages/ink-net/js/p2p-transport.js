@@ -1,7 +1,12 @@
 (function (global) {
   'use strict';
 
-  const DEFAULT_ICE = [{ urls: 'stun:stun.l.google.com:19302' }];
+  /** 默认仅公共 STUN；跨运营商需在 config.json 配 TURN（iceServers）。 */
+  const DEFAULT_ICE = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+  ];
 
   /**
    * 创建一对 WebRTC 连接与可靠有序数据通道。

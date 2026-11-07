@@ -2,11 +2,14 @@ name = "inkmesh-signal"
 main = "src/index.js"
 compatibility_date = "2024-12-01"
 
-# 静态站（export-pages → public/inkmesh/）与信令 / 大厅同 Worker。
+# 可选静态镜像（export-pages → public/inkmesh/）；公开入口默认 GitHub Pages。
+# 本 Worker 主职：信令 WS + 公开大厅。
 [assets]
 directory = "./public"
 binding = "ASSETS"
-# 深链 /inkmesh/ROOMID 由 Worker fetch 里显式回退到 index.html。
+# 禁止 Assets 对 index.html ↔ 尾斜杠互跳；SPA 路由由 Worker 显式回退。
+html_handling = "none"
+not_found_handling = "none"
 run_worker_first = true
 
 # 一房间一 Durable Object，跨 Isolate 共享房主登记。

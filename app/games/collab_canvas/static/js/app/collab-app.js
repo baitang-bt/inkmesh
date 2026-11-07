@@ -7,6 +7,8 @@
   let basePath = String(boot.basePath || '/inkmesh').replace(/\/$/, '') || '/inkmesh';
   let runtimeWsUrl = '';
   let runtimeLobbyUrl = '';
+  /** @type {RTCIceServer[]|null} */
+  let runtimeIceServers = null;
   let lobbyAnnouncer = null;
 
   const joinScreen = document.getElementById('joinScreen');
@@ -33,7 +35,7 @@
   const ROOM_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const ROOM_FIRST = ROOM_ALPHABET.replace('P', '');
 
-  /** 拉取 Pages/本地可选 config.json（wsUrl、basePath）。 */
+  /** 拉取 Pages/本地可选 config.json（wsUrl、basePath、iceServers）。 */
   async function loadRuntimeConfig() {
     try {
       const res = await fetch(basePath + '/config.json', { cache: 'no-store' });
@@ -47,6 +49,9 @@
       }
       if (data && typeof data.lobbyUrl === 'string' && data.lobbyUrl.trim()) {
         runtimeLobbyUrl = data.lobbyUrl.trim().replace(/\/$/, '');
+      }
+      if (data && Array.isArray(data.iceServers) && data.iceServers.length) {
+        runtimeIceServers = data.iceServers;
       }
     } catch (_err) {
       // 本地 FastAPI 无 config.json 时保持同源信令。
@@ -491,6 +496,7 @@
     selfId,
     nickname,
     wsUrl: runtimeWsUrl,
+    iceServers: runtimeIceServers,
     getDisplayName: () => onlinePrefs.resolveDisplayName(nickname),
     getRoomSnapshot: forPlayerId => {
       if (!boardController || !boardController.buildP2pSnapshot) return null;
@@ -786,6 +792,7 @@
   /** 读完可选 config 后再注册 PWA / 连信令，保证 basePath 与 wsUrl 已生效。 */
   loadRuntimeConfig().then(() => {
     if (runtimeWsUrl) session.wsUrl = runtimeWsUrl;
+    if (runtimeIceServers) session.iceServers = runtimeIceServers;
     if (typeof createPwaInstall === 'function') {
       createPwaInstall({
         basePath,

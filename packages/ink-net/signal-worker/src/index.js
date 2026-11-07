@@ -339,23 +339,46 @@ function isRoomDeepLink(path) {
   return roomIdOk(seg);
 }
 
-/** 从 ASSETS 取静态文件；深链回退到大厅 index。 */
+/**
+ * 从 ASSETS 取 SPA 壳（index.html），吞掉 Assets 可能返回的 3xx，避免浏览器循环跳。
+ * @param {Fetcher} assets
+ * @param {string} origin
+ */
+async function fetchSpaShell(assets, origin) {
+  const indexUrl = new URL('/inkmesh/index.html', origin).toString();
+  let res = await assets.fetch(indexUrl);
+  // html_handling=none 后通常直接 200；若仍有 3xx 则跟一次到 Location 再吐 200。
+  if (res.status >= 300 && res.status < 400) {
+    const loc = res.headers.get('Location');
+    if (loc) {
+      const next = new URL(loc, origin);
+      res = await assets.fetch(next.toString());
+    }
+  }
+  if (!res.ok) {
+    return new Response('inkmesh index missing', { status: 502 });
+  }
+  const headers = new Headers(res.headers);
+  headers.set('cache-control', 'no-cache');
+  return new Response(res.body, { status: 200, headers });
+}
+
+/** 从 ASSETS 取静态文件；大厅根与房间深链回退到 index.html（不经浏览器重定向）。 */
 async function serveAssets(request, env, path) {
   if (!env.ASSETS) {
     return new Response('Static assets not bound', { status: 503 });
   }
   if (path === '/' || path === '') {
+    // 根路径只跳一次进 /inkmesh/；后续由 Worker 直接吐 HTML，不再 302。
     return Response.redirect(new URL('/inkmesh/', request.url).toString(), 302);
   }
   if (path === '/inkmesh' || isRoomDeepLink(path)) {
-    const indexUrl = new URL('/inkmesh/index.html', request.url);
-    return env.ASSETS.fetch(new Request(indexUrl.toString(), request));
+    return fetchSpaShell(env.ASSETS, request.url);
   }
   const assetRes = await env.ASSETS.fetch(request);
   if (assetRes.status !== 404) return assetRes;
   if (path.startsWith('/inkmesh/')) {
-    const indexUrl = new URL('/inkmesh/index.html', request.url);
-    return env.ASSETS.fetch(new Request(indexUrl.toString(), request));
+    return fetchSpaShell(env.ASSETS, request.url);
   }
   return assetRes;
 }

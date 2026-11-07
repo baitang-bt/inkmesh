@@ -1,7 +1,9 @@
-name: Deploy GitHub Pages (legacy)
+name: Deploy GitHub Pages
 
-# 公开站已迁到 Cloudflare Worker 静态资源。保留本 workflow 仅作手动回退。
+# 公开静态站：push main 自动发布到 github.io；信令/大厅仍在 Cloudflare Worker。
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -2,11 +2,11 @@
 
 浏览器里多人实时共画：多画板、多图层、远程光标、数位板压感。笔迹权威在**房主浏览器**（P2P 数据通道）；信令只交换房间号与 SDP/ICE。
 
-- **公开站（Cloudflare）**：[https://inkmesh-signal.inkmesh-max.workers.dev/inkmesh/](https://inkmesh-signal.inkmesh-max.workers.dev/inkmesh/)
+- **公开站（GitHub Pages）**：[https://baitang-bt.github.io/inkmesh/](https://baitang-bt.github.io/inkmesh/)
 - **结构 SoT**：[docs/CODE_STRUCTURE.md](docs/CODE_STRUCTURE.md)
 - **联机协议**：[packages/ink-net/protocol.md](packages/ink-net/protocol.md)
 
-> 静态壳、信令 WebSocket、公开大厅 API 都在同一个 Worker（`packages/ink-net/signal-worker`）。大陆访问建议在 Cloudflare Dashboard 给该 Worker **绑定自定义域名**（避免直连 `workers.dev`）。
+> 静态壳发在 **GitHub Pages**；信令 WebSocket 与公开大厅 API 在 Cloudflare Worker（`packages/ink-net/signal-worker`）。`deploy/pages/config.json` 的 `wsUrl` / `lobbyUrl` 指向该 Worker。
 
 ---
 
@@ -24,9 +24,8 @@
  └─────────────┘    └──────┬──────┘
                            │
               ┌────────────▼────────────┐
-              │ Cloudflare Worker        │
-              │ 静态 Assets + DO 信令    │
-              │ + PublicLobby            │
+              │ GitHub Pages（静态壳）   │
+              │ + CF Worker（信令/大厅） │
               └─────────────────────────┘
 ```
 
@@ -35,7 +34,7 @@
 | **ink-engine** | [`packages/ink-engine`](packages/ink-engine) | Canvas 2D；矢量 segment + perfect-freehand；图层合成；工具/压感/颜色；`.inkmesh` 与多格式导出 | WebSocket、房间权威 |
 | **ink-net** | [`packages/ink-net`](packages/ink-net) | 信令 WS + 房主 WebRTC 数据通道；`room_state` / `draw`；权限与私密邀请；公开大厅 announce | 像素渲染、笔刷算法 |
 | **App** | [`app/games/collab_canvas`](app/games/collab_canvas) | 大厅（我的画板 / 最近 / 大厅）、装配 Board↔Session、静态资源版本 | 堆新业务逻辑（应进 engine 或 net） |
-| **signal-worker** | [`packages/ink-net/signal-worker`](packages/ink-net/signal-worker) | Cloudflare Worker：静态站 Assets + 一房一 DO 信令 + `PublicLobby` 目录/预览 | 笔迹持久化服务端 |
+| **signal-worker** | [`packages/ink-net/signal-worker`](packages/ink-net/signal-worker) | Cloudflare Worker：一房一 DO 信令 + `PublicLobby`；可选 Assets 镜像 | 笔迹持久化、主站静态托管 |
 
 契约边界：[`ink-engine/CONTRACT.md`](packages/ink-engine/CONTRACT.md)、[`ink-net/CONTRACT.md`](packages/ink-net/CONTRACT.md)。  
 engine **禁止** `session.send`；net **禁止** 改 `board/core` 渲染。
@@ -53,7 +52,7 @@ engine **禁止** `session.send`；net **禁止** 改 `board/core` 渲染。
 
 ### 公开站（最终用户）
 
-1. 打开 [Worker 上的 Inkmesh](https://inkmesh-signal.inkmesh-max.workers.dev/inkmesh/)。
+1. 打开 [GitHub Pages 上的 Inkmesh](https://baitang-bt.github.io/inkmesh/)。
 2. 左栏：**我的画板** · **最近** · **大厅**。
 3. 「新建画板」开房；「复制链接」分享。私密房请用带邀请参数的链接。
 4. 「安装 / 快捷方式」可装 PWA。
@@ -72,36 +71,30 @@ python run_local.py
 - 信令走同源 `/inkmesh/ws`（FastAPI），不依赖 Cloudflare。
 - 双人测试：两个标签分别加 `?dev_user=a&dev_name=Alice` 与 `?dev_user=b&dev_name=Bob`。
 
-### 部署到 Cloudflare
-
-公开站与信令一次部署：
+### 部署公开站（GitHub Pages）
 
 ```bash
-python3 scripts/export-pages.py
+python3 scripts/export-pages.py   # 本地预览产物在 dist/pages
+```
+
+CI：push `main` → [`.github/workflows/pages.yml`](.github/workflows/pages.yml) → [baitang-bt.github.io/inkmesh](https://baitang-bt.github.io/inkmesh/)。
+
+[`deploy/pages/config.json`](deploy/pages/config.json) 的 `wsUrl` / `lobbyUrl` 指向信令 Worker；可选 `iceServers`（STUN/TURN）。跨运营商联机需自备 TURN 写入该数组。改了静态 JS/CSS：递增 [`routes.py`](app/games/collab_canvas/routes.py) 的 `COLLAB_ASSET_VERSION`。
+
+### 部署信令 Worker（Cloudflare）
+
+信令与公开大厅（不随 push 自动发；手动或改信令逻辑时部署）：
+
+```bash
+python3 scripts/export-pages.py          # 可选：刷新 workers.dev 静态镜像
 bash scripts/sync-worker-public.sh
 cd packages/ink-net/signal-worker && npx wrangler deploy
 # 建议：npx wrangler secret put LOBBY_HMAC
 ```
 
-CI：push `main` → [`.github/workflows/deploy-cloudflare.yml`](.github/workflows/deploy-cloudflare.yml)。  
-仓库 Secrets 需配置：
+CI 手动：[`.github/workflows/deploy-cloudflare.yml`](.github/workflows/deploy-cloudflare.yml)。Secrets：`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。
 
-| Secret | 说明 |
-|--------|------|
-| `CLOUDFLARE_API_TOKEN` | 含 Workers 编辑权限的 API Token |
-| `CLOUDFLARE_ACCOUNT_ID` | 账号 ID（Dashboard 右侧可见） |
-
-[`deploy/pages/config.json`](deploy/pages/config.json) 中 `wsUrl` / `lobbyUrl` 指向同一 Worker 主机。
-
-#### 自定义域名（大陆推荐）
-
-1. 域名 DNS 放到 Cloudflare。
-2. Workers → `inkmesh-signal` → **Custom Domains** → 添加如 `inkmesh.example.com`。
-3. 更新 `config.json` 的 `wsUrl` / `lobbyUrl` 为该域名后重新 `export` + `deploy`。
-
-改了静态 JS/CSS：递增 [`routes.py`](app/games/collab_canvas/routes.py) 的 `COLLAB_ASSET_VERSION`。
-
-旧的 GitHub Pages workflow 仅保留手动触发回退，默认不再随 push 发布。
+信令自定义域名：Workers → `inkmesh-signal` → Custom Domains，再改 `config.json` 后 push 更新 Pages。
 
 ---
 
@@ -111,7 +104,8 @@ CI：push `main` → [`.github/workflows/deploy-cloudflare.yml`](.github/workflo
 |--------|------|
 | 笔刷、图层合成、导出格式 | `packages/ink-engine/js/board/` |
 | 进房、P2P、权限、私密、大厅上报 | `packages/ink-net/js/` |
-| 信令 DO / 公开大厅 / 静态托管 | `packages/ink-net/signal-worker/` |
+| 信令 DO / 公开大厅 | `packages/ink-net/signal-worker/` |
+| 公开静态导出 / Pages config | `scripts/export-pages.py`、`deploy/pages/` |
 | 大厅 UI、房间成员面板、装配 | `app/games/collab_canvas/static/js/app/`、`templates/` |
 | 协议字段 | 先改 `packages/ink-net/protocol.md`，再改 JS |
 
