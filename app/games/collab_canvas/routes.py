@@ -26,7 +26,7 @@ GAME_ID = store.GAME_ID
 APP_PATH = "/inkmesh"
 STATIC_URL = "/static/games/inkmesh"
 # 静态资源 ?v= 版本号；改 JS/CSS 后递增以便生产绕过浏览器缓存。
-COLLAB_ASSET_VERSION = "20261107a"
+COLLAB_ASSET_VERSION = "20261107b"
 
 game_info = {
     "id": GAME_ID,

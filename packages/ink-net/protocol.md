@@ -21,14 +21,15 @@
 
 | 通道 | 职责 |
 |------|------|
-| 信令 WebSocket `/inkmesh/ws`（或配置的 `wsUrl`） | 登记房间号、转交 SDP / ICE；**不存**笔迹 |
-| 房主 ↔ 房客 WebRTC 数据通道 | `join` / `room_state` / `draw` / 图层画板 / 权限 |
+| 信令 WebSocket `/inkmesh/ws`（或配置的 `wsUrl`） | 登记房间号、转交 SDP / ICE；P2P 失败时**回退转发**业务帧；**不存**笔迹 |
+| 房主 ↔ 房客 WebRTC 数据通道 | 优先路径：`join` / `room_state` / `draw` / 图层画板 / 权限 |
+| 信令应用层中继（`signal_relay*`） | 跨网无 TURN 时兜底，载荷与数据通道业务 JSON 相同 |
 
 信令宿主可换：本机 FastAPI，或 `packages/ink-net/signal-worker`（Cloudflare Worker）。消息类型不变。
 
-房主浏览器是房间权威；房客只连房主。
+房主浏览器是房间权威；房客只连房主。客户端：**先 WebRTC，失败再中继**。
 
-ICE：客户端默认公共 STUN；跨运营商需在 `deploy/pages/config.json` 的 `iceServers` 增加自备 TURN（含 `urls` / `username` / `credential`）。
+ICE：客户端默认公共 STUN；可在 `deploy/pages/config.json` 的 `iceServers` 增加 TURN 以减少中继流量。
 
 ### 信令消息
 
@@ -41,7 +42,11 @@ ICE：客户端默认公共 STUN；跨运营商需在 `deploy/pages/config.json`
 | `signal_hosted` | S→C | 登记成功；可含 `lobby_token`（公开大厅 announce HMAC） |
 | `signal_peer` | S→C | 房客：`host_id` |
 | `signal_offer` / `signal_answer` / `signal_ice` | 双向经 S | `to_id`、`from_id`、`sdp` 或 `candidate` |
+| `signal_relay_open` | C→S→peer | 房客声明对 `to_id`（房主）改用中继；送达时带 `from_id` |
+| `signal_relay` | C→S→peer | `payload` 为业务 JSON；单帧序列化 ≤ 256KiB；送达带 `from_id` |
 | `signal_host_gone` | S→C | 房主断开 |
+
+公开大厅 HTTP（搜索/列表/预览）与中继无关，协议不变。
 
 ### 公开大厅（信令 Worker HTTP）
 

@@ -84,6 +84,8 @@
         }
         if (ctx.boardController && ctx.boardController.finishPbccRestoreIfPending()) {
           /* 恢复成功提示已由 finishPbccRestoreIfPending 设置 */
+        } else if (ctx.session && ctx.session._useRelay) {
+          ctx.setStatus('当前为中继连接');
         } else if (!ctx.boardController || !ctx.boardController._pbccRestorePending) {
           ctx.setStatus('');
         }

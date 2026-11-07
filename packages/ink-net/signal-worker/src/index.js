@@ -292,6 +292,49 @@ export class SignalRoom extends DurableObject {
       } catch (_err) {
         sendError(ws, '信令转发失败');
       }
+      return;
+    }
+
+    // 应用层中继：P2P 失败时转发业务 JSON（不落库）。
+    if (msgType === 'signal_relay_open' || msgType === 'signal_relay') {
+      const roomId = normalizeRoomId(data.room || this.roomId || meta.roomId);
+      const toId = String(data.to_id || '');
+      if (!roomId || !toId) {
+        sendError(ws, '信令目标无效');
+        return;
+      }
+      const target = this._findWs(toId);
+      if (!target) {
+        sendError(ws, '对方不在线');
+        return;
+      }
+      if (msgType === 'signal_relay') {
+        let encoded = '';
+        try {
+          encoded = JSON.stringify(data.payload);
+        } catch (_err) {
+          sendError(ws, '中继载荷无效');
+          return;
+        }
+        if (!encoded || encoded.length > 256 * 1024) {
+          sendError(ws, '中继载荷过大');
+          return;
+        }
+      }
+      const out = {
+        type: msgType,
+        room: roomId,
+        from_id: peerId,
+        to_id: toId,
+      };
+      if (msgType === 'signal_relay') {
+        out.payload = data.payload;
+      }
+      try {
+        sendJson(target, out);
+      } catch (_err) {
+        sendError(ws, '中继转发失败');
+      }
     }
   }
 

@@ -6,8 +6,8 @@
 
 ## 当前焦点
 
-- **任务**：邀请链接双房主修复（`20261107a`）
-- **下一步**：push Pages；跨网自备 TURN 写入 `config.json` iceServers
+- **任务**：P2P 优先 + 信令应用层中继回退（`20261107b`）
+- **下一步**：部署 Worker + push Pages；大厅搜索回归
 - **活跃对话**：inkmesh - Main、inkmesh UI、画板P2P独立工作区、联机连接测试、pages-share
 
 ## 活跃泳道

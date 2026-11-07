@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 from fastapi import WebSocket
@@ -25,7 +26,10 @@ async def handle_signal(
         await _signal_host(websocket, data, peer_id=peer_id)
         return True
     if msg_type in ("signal_offer", "signal_answer", "signal_ice"):
-        await _signal_relay(websocket, data, peer_id=peer_id, msg_type=msg_type)
+        await _signal_webrtc_forward(websocket, data, peer_id=peer_id, msg_type=msg_type)
+        return True
+    if msg_type in ("signal_relay_open", "signal_relay"):
+        await _signal_app_relay(websocket, data, peer_id=peer_id, msg_type=msg_type)
         return True
     return False
 
@@ -62,7 +66,7 @@ async def _signal_host(websocket: WebSocket, data: dict, *, peer_id: str) -> Non
     )
 
 
-async def _signal_relay(
+async def _signal_webrtc_forward(
     websocket: WebSocket,
     data: dict,
     *,
@@ -95,6 +99,48 @@ async def _signal_relay(
         await send_json(target, payload)
     except Exception:
         await send_error(websocket, "信令转发失败")
+
+
+async def _signal_app_relay(
+    websocket: WebSocket,
+    data: dict,
+    *,
+    peer_id: str,
+    msg_type: str,
+) -> None:
+    """P2P 失败时转发业务 JSON（应用层中继，不落库）。"""
+    room_id = store.normalize_room_id(
+        data.get("room") or store.peer_signal_room.get(peer_id)
+    )
+    to_id = str(data.get("to_id") or "")
+    if not room_id or not to_id:
+        await send_error(websocket, "信令目标无效")
+        return
+    target = store.find_peer_ws(room_id, to_id)
+    if target is None:
+        await send_error(websocket, "对方不在线")
+        return
+    out = {
+        "type": msg_type,
+        "room": room_id,
+        "from_id": peer_id,
+        "to_id": to_id,
+    }
+    if msg_type == "signal_relay":
+        body = data.get("payload")
+        try:
+            encoded = json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+        except (TypeError, ValueError):
+            await send_error(websocket, "中继载荷无效")
+            return
+        if not encoded or len(encoded) > 256 * 1024:
+            await send_error(websocket, "中继载荷过大")
+            return
+        out["payload"] = body
+    try:
+        await send_json(target, out)
+    except Exception:
+        await send_error(websocket, "中继转发失败")
 
 
 async def cleanup_signal_peer(peer_id: Optional[str]) -> None:

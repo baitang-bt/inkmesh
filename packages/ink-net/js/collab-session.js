@@ -66,6 +66,14 @@
       this._noHostRetryCount = 0;
       this._noHostRetryTimer = null;
       this._guestP2pTimer = null;
+      /** 房主：经信令中继的 guest peerId */
+      this._relayPeers = new Set();
+      /** 房客：当前是否走应用层中继 */
+      this._useRelay = false;
+      /** 重连时优先中继，跳过长时间 P2P 等待 */
+      this._preferRelayOnReconnect = false;
+      /** 正在切中继，忽略 datachannel close */
+      this._switchingToRelay = false;
     }
 
     /** 供 createPeerLink 使用的 ICE 服务器列表。 */
@@ -317,6 +325,14 @@
         this._onRemoteIce(data);
         return;
       }
+      if (type === 'signal_relay_open') {
+        this._onSignalRelayOpen(data);
+        return;
+      }
+      if (type === 'signal_relay') {
+        this._onSignalRelay(data);
+        return;
+      }
       if (type === 'signal_host_gone') {
         this._markHostGone(data.message || '房主已离开房间');
         this._dispatch({ type: 'room_removed', message: this.lastError });
@@ -370,19 +386,27 @@
     /** 返回连接状态摘要，供网络面板显示。 */
     getConnectionInfo() {
       let statusLabel = '断开';
+      const p2pOpen = Boolean(
+        this._hostLink && this._hostLink.dc && this._hostLink.dc.readyState === 'open'
+      );
       const mediaOpen = this._role === 'host'
         ? true
-        : Boolean(this._hostLink && this._hostLink.dc && this._hostLink.dc.readyState === 'open');
+        : this._useRelay || p2pOpen;
       if (this.ws) {
         if (this.ws.readyState === WebSocket.CONNECTING) statusLabel = '连接中';
         else if (this.ws.readyState === WebSocket.OPEN) {
-          statusLabel = this._inRoom && mediaOpen ? '已连接' : '信令已连接';
+          if (this._inRoom && mediaOpen) {
+            statusLabel = this._useRelay ? '中继已连接' : '已连接';
+          } else {
+            statusLabel = '信令已连接';
+          }
         } else if (this.ws.readyState === WebSocket.CLOSING) statusLabel = '关闭中';
       }
       return {
         connected: this.connected,
         readyState: this.ws ? this.ws.readyState : WebSocket.CLOSED,
         statusLabel,
+        transport: this._role === 'guest' && this._useRelay ? 'relay' : (this._role ? 'p2p' : ''),
         roomId: this.roomId || (this._pendingJoin && this._pendingJoin.room) || '',
         role: this._role,
         lastRtt: this.lastRtt,
@@ -431,16 +455,46 @@
         return true;
       }
       if (this._role === 'guest') {
+        if (this._useRelay) {
+          return this._sendAppRelay(this._hostPeerId, payload);
+        }
         return global.P2pTransport.sendOnLink(this._hostLink, payload);
       }
       return this._sendSignal(payload);
     }
 
-    /** 房主向所有房客数据通道广播。 */
+    /**
+     * 经信令转发业务 JSON 到指定 peer（应用层中继）。
+     * @param {string} toId
+     * @param {object} payload
+     */
+    _sendAppRelay(toId, payload) {
+      const target = String(toId || '');
+      if (!target || !payload) return false;
+      return this._sendSignal({
+        type: 'signal_relay',
+        room: this.roomId || (this._pendingJoin && this._pendingJoin.room) || '',
+        to_id: target,
+        payload
+      });
+    }
+
+    /** 房主向房客广播：中继 peer 走 signal_relay，其余走数据通道。 */
     _broadcastToGuests(payload, excludePeerId) {
+      const sent = new Set();
       this._guestLinks.forEach((link, peerId) => {
         if (excludePeerId && peerId === excludePeerId) return;
-        global.P2pTransport.sendOnLink(link, payload);
+        if (this._relayPeers.has(peerId)) {
+          this._sendAppRelay(peerId, payload);
+        } else {
+          global.P2pTransport.sendOnLink(link, payload);
+        }
+        sent.add(peerId);
+      });
+      this._relayPeers.forEach(peerId => {
+        if (excludePeerId && peerId === excludePeerId) return;
+        if (sent.has(peerId)) return;
+        this._sendAppRelay(peerId, payload);
       });
     }
 
@@ -493,6 +547,11 @@
       this._clearGuestP2pTimer();
       this._intentionalLeave = false;
       this._hostGone = false;
+      if (!this._reconnecting) {
+        this._useRelay = false;
+        this._preferRelayOnReconnect = false;
+        this._relayPeers.clear();
+      }
       const target = normalizeRoomId(roomId);
       if (!target) return;
       const invite = options && options.invite != null ? String(options.invite) : '';
@@ -556,13 +615,18 @@
       this._dispatch(state);
     }
 
-    /** 作为房客向房主发起 WebRTC。 */
+    /** 作为房客向房主发起 WebRTC；重连偏好中继时直接走信令中继。 */
     async _connectAsGuest(roomId, hostId) {
       const target = normalizeRoomId(roomId);
       this._role = 'guest';
       this.roomId = target;
       this._hostPeerId = hostId;
       this._clearGuestP2pTimer();
+      if (this._preferRelayOnReconnect) {
+        this._enterRelayMode();
+        return;
+      }
+      this._useRelay = false;
       this._teardownGuestLinkOnly();
       const link = global.P2pTransport.createPeerLink({
         createDataChannel: true,
@@ -591,61 +655,104 @@
         });
         this._guestP2pTimer = setTimeout(() => {
           this._guestP2pTimer = null;
-          this._failGuestP2pConnect();
+          this._enterRelayMode();
         }, GUEST_P2P_TIMEOUT_MS);
       } catch (err) {
         this.lastError = (err && err.message) || '无法建立 P2P 连接';
-        this._emit('error', { message: this.lastError });
+        this._enterRelayMode();
       }
     }
 
     /**
-     * 房客 P2P 超时：拆链路回大厅，绝不因此占成房主。
+     * 房客改走信令中继：通知房主后发送 join，不占成房主。
      */
-    _failGuestP2pConnect() {
-      if (this._role !== 'guest' || this._inRoom || this._intentionalLeave || this._hostGone) return;
-      const dcOpen = this._hostLink && this._hostLink.dc && this._hostLink.dc.readyState === 'open';
-      if (dcOpen) return;
-      this.lastError = '无法连上房主（网络限制），请重试或在 config.json 配置 TURN（iceServers）';
+    _enterRelayMode() {
+      if (this._intentionalLeave || this._hostGone) return;
+      if (this._role !== 'guest' || !this._hostPeerId || !this.roomId) return;
+      if (this._useRelay && !this._hostLink) {
+        this._sendGuestJoinMessage(true);
+        return;
+      }
+      this._clearGuestP2pTimer();
+      this._switchingToRelay = true;
       this._teardownGuestLinkOnly();
-      this._role = '';
-      this.roomId = '';
-      this._hostPeerId = '';
-      this._pendingJoin = null;
-      this._dispatch({
-        type: 'room_removed',
-        message: this.lastError
+      this._switchingToRelay = false;
+      this._useRelay = true;
+      this._preferRelayOnReconnect = true;
+      this._role = 'guest';
+      this._sendSignal({
+        type: 'signal_relay_open',
+        room: this.roomId,
+        to_id: this._hostPeerId
       });
+      this._sendGuestJoinMessage(true);
     }
 
-    /** 房客数据通道打开后发送 join（私密房附带 invite）。 */
-    _onGuestChannelOpen() {
-      this._clearGuestP2pTimer();
+    /**
+     * 房客发送 join（数据通道或中继）。
+     * @param {boolean} viaRelay
+     */
+    _sendGuestJoinMessage(viaRelay) {
       const displayName = this.getDisplayName ? this.getDisplayName() : this.nickname;
       const invite = (this._pendingJoin && this._pendingJoin.invite) || this._pendingInvite || '';
-      global.P2pTransport.sendOnLink(this._hostLink, {
+      const joinMsg = {
         type: 'join',
         room: this.roomId,
         name: displayName,
         player_id: this.selfId || this._signalPeerId,
         invite
-      });
+      };
+      if (viaRelay || this._useRelay) {
+        this._sendAppRelay(this._hostPeerId, joinMsg);
+        return;
+      }
+      global.P2pTransport.sendOnLink(this._hostLink, joinMsg);
     }
 
-    /** 房客通道断开：房主已走则不重连，避免空房占主。 */
+    /** 房主收到房客改用中继的声明。 */
+    _onSignalRelayOpen(data) {
+      if (this._role !== 'host') return;
+      const fromId = String(data.from_id || '');
+      if (!fromId) return;
+      this._relayPeers.add(fromId);
+      this._closeGuestLink(fromId);
+    }
+
+    /** 收到经信令转发的业务帧，按数据通道消息处理。 */
+    _onSignalRelay(data) {
+      const fromId = String(data.from_id || '');
+      const payload = data.payload;
+      if (!payload || typeof payload !== 'object') return;
+      if (this._role === 'host') {
+        if (fromId) this._relayPeers.add(fromId);
+        this._onDataMessage(payload, { asHost: true, peerId: fromId });
+        return;
+      }
+      if (this._role === 'guest') {
+        this._useRelay = true;
+        this._onDataMessage(payload, { asHost: false });
+      }
+    }
+
+    /** 房客数据通道打开后发送 join（私密房附带 invite）。 */
+    _onGuestChannelOpen() {
+      this._clearGuestP2pTimer();
+      this._useRelay = false;
+      this._sendGuestJoinMessage(false);
+    }
+
+    /** 房客通道断开：切中继中忽略；已在房则重连；进房失败则回大厅。 */
     _onGuestChannelClose() {
+      if (this._switchingToRelay || this._useRelay) return;
       if (this._intentionalLeave || this._hostGone || this._role !== 'guest') return;
       if (this._inRoom && this.roomId) {
         this.lastError = '连接已断开，正在重新连接…';
+        this._preferRelayOnReconnect = true;
         this._scheduleReconnect(this.roomId);
         return;
       }
-      /* 进房中被拒或通道先于 room_removed 关闭：回到大厅并复位加入按钮 */
-      this.lastError = this.lastError || '无法进入房间';
-      this._dispatch({
-        type: 'room_removed',
-        message: this.lastError
-      });
+      /* P2P 未开就断：改中继，不回大厅 */
+      this._enterRelayMode();
     }
 
     /**
@@ -657,6 +764,7 @@
       this._clearReconnectTimer();
       this._clearNoHostRetry();
       this._clearGuestP2pTimer();
+      this._preferRelayOnReconnect = false;
       this.lastError = message || '房主已离开房间';
       this._teardownMedia();
       this._inRoom = false;
@@ -676,6 +784,8 @@
       if (this._role !== 'host') return;
       const fromId = String(data.from_id || '');
       if (!fromId) return;
+      // 该 peer 已声明中继则忽略迟到的 WebRTC offer。
+      if (this._relayPeers.has(fromId)) return;
       this._closeGuestLink(fromId);
       const link = global.P2pTransport.createPeerLink({
         createDataChannel: false,
@@ -865,6 +975,8 @@
       this._teardownGuestLinkOnly();
       this._guestLinks.forEach(link => global.P2pTransport.closeLink(link));
       this._guestLinks.clear();
+      this._relayPeers.clear();
+      this._useRelay = false;
       this._playerIdByPeer.clear();
       this._peerIdByPlayer.clear();
       this._hostRoom = null;
@@ -873,6 +985,7 @@
     /** 主动离开房间。 */
     leaveRoom() {
       this._intentionalLeave = true;
+      this._preferRelayOnReconnect = false;
       this._clearReconnectTimer();
       this._clearNoHostRetry();
       this._clearGuestP2pTimer();
@@ -1013,6 +1126,7 @@
         this._hostGone = false;
         this._intentionalLeave = false;
         this.lastError = '';
+        if (this._useRelay) this._preferRelayOnReconnect = true;
         if (data.self_id) this.selfId = data.self_id;
         if (data.private_room != null) this._privateRoom = Boolean(data.private_room);
       }

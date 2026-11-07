@@ -79,7 +79,7 @@ python3 scripts/export-pages.py   # 本地预览产物在 dist/pages
 
 CI：push `main` → [`.github/workflows/pages.yml`](.github/workflows/pages.yml) → [baitang-bt.github.io/inkmesh](https://baitang-bt.github.io/inkmesh/)。
 
-[`deploy/pages/config.json`](deploy/pages/config.json) 的 `wsUrl` / `lobbyUrl` 指向信令 Worker；可选 `iceServers`（STUN/TURN）。跨运营商联机需自备 TURN 写入该数组。改了静态 JS/CSS：递增 [`routes.py`](app/games/collab_canvas/routes.py) 的 `COLLAB_ASSET_VERSION`。
+[`deploy/pages/config.json`](deploy/pages/config.json) 的 `wsUrl` / `lobbyUrl` 指向信令 Worker；可选 `iceServers`（STUN/TURN）。联机优先 WebRTC；跨网打洞失败时自动经信令 **应用层中继**（无需自建 TURN）。大厅搜索仍为 HTTP，与中继无关。改了静态 JS/CSS：递增 [`routes.py`](app/games/collab_canvas/routes.py) 的 `COLLAB_ASSET_VERSION`。
 
 ### 部署信令 Worker（Cloudflare）
 
